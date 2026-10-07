@@ -81,6 +81,19 @@ INSTRUMENTS_TICK_DEPTH_LEVELS <- 5
 #'
 #' Code normally creates one of the family classes, such as `Equity` or `EquityIndexOption`, rather than this class, because the family class asks only for the fields that identify one of its own contracts.
 #'
+#' The examples below start with a short tour of the class, then show its properties and the functions on its class generator, in this order:
+#'
+#' * For `Instrument$shared_unified_broker_interface()`, show that every instrument built without a client of its own shares the one client, and ask it whether the session is connected.
+#' * For `Instrument$shared_unified_broker_interface()`, send a raw request to a UBI route that has no method of its own, here the last price of Infosys, through the shared client.
+#' * For `Instrument$shared_unified_broker_interface()`, hand the shared client to an instrument explicitly, as code that manages its own clients would.
+#' * For `quote`, print the headline fields of the full quote for Infosys.
+#' * For `quote`, check whether the quote is stale before trusting it, which UBI reports in the quote itself.
+#' * For `last_price`, print the last traded price of Infosys.
+#' * For `last_price`, print the last price of three indices side by side.
+#' * For `last_price`, value a hypothetical holding of 25 Infosys shares at the last price.
+#' * For `ohlc`, print the day's range of the Nifty index so far.
+#' * For `ohlc`, say whether Infosys opened with a gap up or a gap down against the previous close.
+#'
 #' @examples
 #' \dontrun{
 #' infosys <- TradeableInstrument$new(
@@ -91,6 +104,123 @@ INSTRUMENTS_TICK_DEPTH_LEVELS <- 5
 #' print(infosys)
 #' infosys$last_price
 #' tail(infosys$prices(days = 10))
+#'
+#' shared_client <- Instrument$shared_unified_broker_interface()
+#' again <- Instrument$shared_unified_broker_interface()
+#' print(identical(shared_client, again))
+#' print(shared_client$status())
+#'
+#' shared_client <- Instrument$shared_unified_broker_interface()
+#' answer <- shared_client$get(
+#'   "/api/instruments/ltp",
+#'   params = list(
+#'     exchange = "nse",
+#'     segment = "equities",
+#'     symbol = "INFY"
+#'   )
+#' )
+#' print(answer[["last_price"]])
+#'
+#' shared_client <- Instrument$shared_unified_broker_interface()
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY",
+#'   unified_broker_interface = shared_client
+#' )
+#' cat(format(infosys), infosys$last_price, "\n")
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#' quote <- infosys$quote
+#' cat("Last price:", quote[["last_price"]], "\n")
+#' cat("Previous close:", quote[["previous_close"]], "\n")
+#' cat("Change percent:", quote[["change_percent"]], "\n")
+#' cat("Volume:", quote[["volume"]], "\n")
+#' cat("Served by:", quote[["broker"]], "from", quote[["source"]], "\n")
+#'
+#' reliance <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "RELIANCE"
+#' )
+#' quote <- reliance$quote
+#' if (quote[["stale"]]) {
+#'   cat("The quote has been stale since", quote[["stale_since"]], "\n")
+#' } else {
+#'   cat("The quote is fresh:", quote[["last_price"]], "\n")
+#' }
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#' print(infosys$last_price)
+#'
+#' symbols <- c(
+#'   "NIFTY",
+#'   "BANKNIFTY",
+#'   "FINNIFTY"
+#' )
+#' for (symbol in symbols) {
+#'   index <- NonTradeableInstrument$new(
+#'     exchange = "nse",
+#'     segment = "equity_indices",
+#'     symbol = symbol
+#'   )
+#'   cat(sprintf("%s: %s", symbol, index$last_price), "\n")
+#' }
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#' share_count <- 25
+#' last_price <- infosys$last_price
+#' if (is.null(last_price)) {
+#'   cat("UBI has no last price for Infosys.", "\n")
+#' } else {
+#'   cat(
+#'     sprintf(
+#'       "%s shares are worth Rs %.2f",
+#'       share_count,
+#'       share_count * last_price
+#'     ),
+#'     "\n"
+#'   )
+#' }
+#'
+#' nifty <- NonTradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equity_indices",
+#'   symbol = "NIFTY"
+#' )
+#' day <- nifty$ohlc
+#' cat("Open:", day[["ohlc"]][["open"]], "\n")
+#' cat("High:", day[["ohlc"]][["high"]], "\n")
+#' cat("Low:", day[["ohlc"]][["low"]], "\n")
+#' cat("Last:", day[["last_price"]], "\n")
+#' cat("Previous close:", day[["previous_close"]], "\n")
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#' day <- infosys$ohlc
+#' opening_price <- day[["ohlc"]][["open"]]
+#' previous_close <- day[["previous_close"]]
+#' gap_percent <- (opening_price - previous_close) / previous_close * 100
+#' if (gap_percent > 0) {
+#'   cat(sprintf("Gap up of %.2f%%", gap_percent), "\n")
+#' } else {
+#'   cat(sprintf("Gap down of %.2f%%", -gap_percent), "\n")
+#' }
 #' }
 #' @export
 Instrument <- R6::R6Class(
@@ -242,6 +372,12 @@ Instrument <- R6::R6Class(
     #' Fetches the instrument's candles for a range from UBI.
     #'
     #' Give either `from_date` and `to_date`, or `days`. UBI serves any range in one request.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Print the last five daily candles of Infosys.
+    #' * Work out the Nifty index's return over a fixed range of dates from its first and last close.
+    #' * Compare adjusted and unadjusted closes of Reliance over five years, where a split or bonus shows up as a price factor below 1.
     #' @param interval The character candle interval, such as `"day"` or `"5minute"`.
     #' @param from_date The first day of the range as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL` when `days` is given.
     #' @param to_date The last day of the range as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL` when `days` is given.
@@ -280,7 +416,26 @@ Instrument <- R6::R6Class(
     #' first_close <- candles$close[[1]]
     #' last_close <- candles$close[[nrow(candles)]]
     #' change_percent <- (last_close - first_close) / first_close * 100
-    #' cat(sprintf("Nifty from %s to %s: %.2f%%\n", first_close, last_close, change_percent))
+    #' cat(
+    #'   sprintf(
+    #'     "Nifty from %s to %s: %.2f%%",
+    #'     first_close,
+    #'     last_close,
+    #'     change_percent
+    #'   ),
+    #'   "\n"
+    #' )
+    #'
+    #' reliance <- TradeableInstrument$new(
+    #'   exchange = "nse",
+    #'   segment = "equities",
+    #'   symbol = "RELIANCE"
+    #' )
+    #' adjusted <- reliance$prices(days = 1825, adjusted = TRUE)
+    #' unadjusted <- reliance$prices(days = 1825, adjusted = FALSE)
+    #' cat("First adjusted close:", adjusted$close[[1]], "\n")
+    #' cat("First unadjusted close:", unadjusted$close[[1]], "\n")
+    #' cat("Smallest price factor:", min(adjusted$price_factor), "\n")
     #' }
     prices = function(
       interval = "day",
@@ -342,6 +497,11 @@ Instrument <- R6::R6Class(
     #' Fetches every tick UBI's unified live feed recorded for the instrument in a period.
     #'
     #' The period includes `start` and leaves out `end`. A value without an offset is read as India time, and a bare date means midnight at the start of that day. A busy instrument records many ticks a second, so ask for short periods.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Print the best bid and offer of Vodafone Idea for the first minute of a session.
+    #' * Work out the share of ticks in an hour at which the spread was a single tick.
     #' @param start The first instant to include, as a `POSIXct` or a character value such as `"2026-09-29 10:00"`.
     #' @param end The first instant to leave out, as a `POSIXct` or a character value such as `"2026-09-29 15:30"`.
     #' @param adjusted A logical that is `TRUE` for prices adjusted for splits and bonuses.
@@ -358,15 +518,33 @@ Instrument <- R6::R6Class(
     #'   start = "2026-09-29 09:15",
     #'   end = "2026-09-29 09:16"
     #' )
-    #' print(head(ticks[, c("datetime", "bid1_price", "offer1_price")], 10))
+    #' columns <- c(
+    #'   "datetime",
+    #'   "bid1_price",
+    #'   "offer1_price"
+    #' )
+    #' print(head(ticks[, columns], 10))
     #'
+    #' vodafone_idea <- TradeableInstrument$new(
+    #'   exchange = "nse",
+    #'   segment = "equities",
+    #'   symbol = "IDEA"
+    #' )
     #' ticks <- vodafone_idea$ticks(
     #'   start = "2026-09-29 10:00",
     #'   end = "2026-09-29 11:00"
     #' )
     #' spread <- ticks$offer1_price - ticks$bid1_price
-    #' one_tick <- abs(spread - vodafone_idea$tick_size) < 1e-9
-    #' cat(sprintf("%d ticks, %.1f%% at one tick\n", nrow(ticks), mean(one_tick) * 100))
+    #' tick_size <- as.numeric(vodafone_idea$tick_size)
+    #' one_tick <- abs(spread - tick_size) < 1e-9
+    #' cat(
+    #'   sprintf(
+    #'     "%s ticks, %.1f%% at one tick",
+    #'     nrow(ticks),
+    #'     mean(one_tick) * 100
+    #'   ),
+    #'   "\n"
+    #' )
     #' }
     ticks = function(start, end, adjusted = TRUE) {
       parameters <- list(
@@ -848,6 +1026,56 @@ InstrumentCatalogue <- R6::R6Class(
 #'
 #' The members that read orders, trades and positions read the whole account's document from UBI and keep this instrument's own rows, because UBI has no route for one instrument.
 #'
+#' The examples below start with a short tour of the class, then show its properties, in this order:
+#'
+#' * For `bids`, print every level on the buy side of the Infosys order book, best first.
+#' * For `bids`, add up how many shares are bid for across the visible levels of the Reliance book.
+#' * For `offers`, print every level on the sell side of the Infosys order book, best first.
+#' * For `offers`, compare the quantity offered with the quantity bid in the visible book, a rough measure of selling pressure.
+#' * For `best_bid`, print the highest bid for Infosys, or say that nobody is bidding.
+#' * For `best_bid`, measure how far the best bid is below the last traded price.
+#' * For `best_offer`, print the lowest offer for Infosys, or say that nobody is offering.
+#' * For `best_offer`, work out what buying 10 shares at the best offer would cost, when that level holds enough.
+#' * For `bid_offer_spread`, print the spread of Infosys in rupees.
+#' * For `bid_offer_spread`, express the spread in ticks, which says how liquid the book is.
+#' * For `bid_offer_spread`, rank three shares by their spread as a percentage of the last price.
+#' * For `mid_price`, print the mid price of Infosys.
+#' * For `mid_price`, compare the mid price with the last traded price to see which side traded last.
+#' * For `volume_weighted_average_price`, print today's volume weighted average price of Infosys.
+#' * For `volume_weighted_average_price`, say whether Reliance is trading above or below its average price for the day, a common intraday bias check.
+#' * For `last_quantity`, print the size of the last Infosys trade.
+#' * For `last_quantity`, show the value of the last Reliance trade in rupees.
+#' * For `total_traded_volume`, print how many Infosys shares have traded today.
+#' * For `total_traded_volume`, compare today's volume with the average daily volume of the last month.
+#' * For `open_interest`, print the open interest of the nearest Nifty future.
+#' * For `open_interest`, express the open interest of the nearest Nifty future in lots rather than units.
+#' * For `open_interest`, show that a share has no open interest, so the property is `NULL`.
+#' * For `last_trade_time`, print when Infosys last traded, in India time.
+#' * For `last_trade_time`, work out how many seconds ago Reliance last traded, a quick check that the feed is alive.
+#' * For `parents`, print the parents UBI's order engine is still working in Vodafone Idea.
+#' * For `parents`, hold a buy limit order 3 per cent below the market, find it among the parents, and cancel it.
+#' * For `orders`, print today's Vodafone Idea orders with their status, or `NULL` when there are none.
+#' * For `orders`, count today's orders in Vodafone Idea by status, which is how an order whose status has no property of its own, such as `EXPIRED`, is found.
+#' * For `orders`, split today's Vodafone Idea orders by whether UBI's order engine placed them for a parent.
+#' * For `open_orders`, print the Vodafone Idea orders still waiting in the market.
+#' * For `open_orders`, add up the quantity still waiting to fill on each side of the Infosys book from this account's open orders.
+#' * For `completed_orders`, print the Vodafone Idea orders that filled in full today.
+#' * For `completed_orders`, work out the average buying and selling prices of today's filled Vodafone Idea orders.
+#' * For `rejected_orders`, print why each of today's refused Vodafone Idea orders was refused.
+#' * For `rejected_orders`, count today's refusals in Vodafone Idea by broker.
+#' * For `cancelled_orders`, print today's cancelled Vodafone Idea orders.
+#' * For `cancelled_orders`, count how many of today's cancelled Vodafone Idea orders had partly filled first.
+#' * For `trades`, print today's Vodafone Idea trades.
+#' * For `trades`, add up the value bought and sold in Vodafone Idea today from its trades.
+#' * For `net_positions`, print the positions open in Vodafone Idea, or `NULL` when nothing is held.
+#' * For `net_positions`, say whether each Reliance position is long or short, and under which product.
+#' * For `day_positions`, print today's own positions in Vodafone Idea.
+#' * For `day_positions`, compare how many rows the day bucket and the net bucket report for Vodafone Idea.
+#' * For `positions_value`, print what the Vodafone Idea positions are worth now, or `NULL` when nothing is held.
+#' * For `positions_value`, add up the value of the positions in three shares, counting a short as negative.
+#' * For `positions_pnl`, print the profit or loss on the Vodafone Idea positions, or `NULL` when nothing is held.
+#' * For `positions_pnl`, say whether the Reliance positions are making or losing money overall.
+#'
 #' @examples
 #' \dontrun{
 #' infosys <- TradeableInstrument$new(
@@ -859,6 +1087,656 @@ InstrumentCatalogue <- R6::R6Class(
 #' infosys$bid_offer_spread
 #' answer <- infosys$buy_at_best_bid_price(quantity = 1, product = "mis")
 #' infosys$cancel_open_orders()
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#'
+#' for (level in infosys$bids) {
+#'   cat(level[["price"]], level[["quantity"]], level[["orders"]], "\n")
+#' }
+#'
+#' reliance <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "RELIANCE"
+#' )
+#'
+#' total_quantity <- 0
+#' for (level in reliance$bids) {
+#'   total_quantity <- total_quantity + level[["quantity"]]
+#' }
+#' cat(
+#'   sprintf(
+#'     "%s levels bid for %s shares",
+#'     length(reliance$bids),
+#'     total_quantity
+#'   ),
+#'   "\n"
+#' )
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#'
+#' for (level in infosys$offers) {
+#'   cat(level[["price"]], level[["quantity"]], level[["orders"]], "\n")
+#' }
+#'
+#' reliance <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "RELIANCE"
+#' )
+#'
+#' offered <- 0
+#' for (level in reliance$offers) {
+#'   offered <- offered + level[["quantity"]]
+#' }
+#' bid <- 0
+#' for (level in reliance$bids) {
+#'   bid <- bid + level[["quantity"]]
+#' }
+#' cat(sprintf("Offered %s against bid %s", offered, bid), "\n")
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#'
+#' best_bid <- infosys$best_bid
+#' if (is.null(best_bid)) {
+#'   cat("Nobody is bidding.", "\n")
+#' } else {
+#'   cat(
+#'     sprintf(
+#'       "%s shares bid at %s",
+#'       best_bid[["quantity"]],
+#'       best_bid[["price"]]
+#'     ),
+#'     "\n"
+#'   )
+#' }
+#'
+#' reliance <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "RELIANCE"
+#' )
+#'
+#' best_bid <- reliance$best_bid
+#' last_price <- reliance$last_price
+#' if (is.null(best_bid) || is.null(last_price)) {
+#'   cat("The book or the last price is empty.", "\n")
+#' } else {
+#'   cat(
+#'     sprintf(
+#'       "The best bid is %.2f below",
+#'       last_price - best_bid[["price"]]
+#'     ),
+#'     "\n"
+#'   )
+#' }
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#'
+#' best_offer <- infosys$best_offer
+#' if (is.null(best_offer)) {
+#'   cat("Nobody is offering.", "\n")
+#' } else {
+#'   cat(
+#'     sprintf(
+#'       "%s shares offered at %s",
+#'       best_offer[["quantity"]],
+#'       best_offer[["price"]]
+#'     ),
+#'     "\n"
+#'   )
+#' }
+#'
+#' reliance <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "RELIANCE"
+#' )
+#'
+#' wanted_quantity <- 10
+#' best_offer <- reliance$best_offer
+#' if (is.null(best_offer)) {
+#'   cat("Nobody is offering.", "\n")
+#' } else if (best_offer[["quantity"]] < wanted_quantity) {
+#'   cat("The best offer is too small for 10 shares.", "\n")
+#' } else {
+#'   cat(
+#'     sprintf("Cost: Rs %.2f", best_offer[["price"]] * wanted_quantity),
+#'     "\n"
+#'   )
+#' }
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#'
+#' print(infosys$bid_offer_spread)
+#'
+#' reliance <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "RELIANCE"
+#' )
+#'
+#' spread <- reliance$bid_offer_spread
+#' if (is.null(spread)) {
+#'   cat("One side of the book is empty.", "\n")
+#' } else {
+#'   ticks <- round(spread / as.numeric(reliance$tick_size))
+#'   cat(
+#'     sprintf("The spread is %.2f rupees, or %s ticks", spread, ticks),
+#'     "\n"
+#'   )
+#' }
+#'
+#' symbols <- c(
+#'   "INFY",
+#'   "TCS",
+#'   "HDFCBANK"
+#' )
+#' for (symbol in symbols) {
+#'   share <- TradeableInstrument$new(
+#'     exchange = "nse",
+#'     segment = "equities",
+#'     symbol = symbol
+#'   )
+#'   spread <- share$bid_offer_spread
+#'   last_price <- share$last_price
+#'   if (is.null(spread) || is.null(last_price)) {
+#'     cat(sprintf("%s: no two-sided book", symbol), "\n")
+#'   } else {
+#'     cat(sprintf("%s: %.4f%%", symbol, spread / last_price * 100), "\n")
+#'   }
+#' }
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#'
+#' print(infosys$mid_price)
+#'
+#' reliance <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "RELIANCE"
+#' )
+#'
+#' mid_price <- reliance$mid_price
+#' last_price <- reliance$last_price
+#' if (is.null(mid_price) || is.null(last_price)) {
+#'   cat("The book is one-sided or there is no last price.", "\n")
+#' } else if (last_price >= mid_price) {
+#'   cat(
+#'     sprintf("Last %s is at or above mid %s", last_price, mid_price),
+#'     "\n"
+#'   )
+#' } else {
+#'   cat(sprintf("Last %s is below mid %s", last_price, mid_price), "\n")
+#' }
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#'
+#' print(infosys$volume_weighted_average_price)
+#'
+#' reliance <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "RELIANCE"
+#' )
+#'
+#' average_price <- reliance$volume_weighted_average_price
+#' last_price <- reliance$last_price
+#' if (is.null(average_price) || is.null(last_price)) {
+#'   cat("The average price or the last price is unknown.", "\n")
+#' } else if (last_price > average_price) {
+#'   cat(
+#'     sprintf("Above the average: %s > %s", last_price, average_price),
+#'     "\n"
+#'   )
+#' } else {
+#'   cat(
+#'     sprintf(
+#'       "At or below the average: %s <= %s",
+#'       last_price,
+#'       average_price
+#'     ),
+#'     "\n"
+#'   )
+#' }
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#'
+#' print(infosys$last_quantity)
+#'
+#' reliance <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "RELIANCE"
+#' )
+#'
+#' last_quantity <- reliance$last_quantity
+#' last_price <- reliance$last_price
+#' if (is.null(last_quantity) || is.null(last_price)) {
+#'   cat("The last trade is unknown.", "\n")
+#' } else {
+#'   cat(
+#'     sprintf("Rs %.2f changed hands last", last_quantity * last_price),
+#'     "\n"
+#'   )
+#' }
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#'
+#' print(infosys$total_traded_volume)
+#'
+#' reliance <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "RELIANCE"
+#' )
+#'
+#' candles <- reliance$prices(days = 30)
+#' average_volume <- mean(candles$volume)
+#' today_volume <- reliance$total_traded_volume
+#' if (is.null(today_volume)) {
+#'   cat("Today's volume is unknown.", "\n")
+#' } else {
+#'   cat(
+#'     sprintf("Today is %.2f times average", today_volume / average_volume),
+#'     "\n"
+#'   )
+#' }
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' cat(format(nifty_future), nifty_future$open_interest, "\n")
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' open_interest <- nifty_future$open_interest
+#' if (is.null(open_interest) || is.null(nifty_future$lot_size)) {
+#'   cat("The open interest or the lot size is unknown.", "\n")
+#' } else {
+#'   cat(
+#'     sprintf("%s lots are open", open_interest %/% nifty_future$lot_size),
+#'     "\n"
+#'   )
+#' }
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#'
+#' print(infosys$open_interest)
+#'
+#' infosys <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "INFY"
+#' )
+#'
+#' print(infosys$last_trade_time)
+#'
+#' reliance <- TradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equities",
+#'   symbol = "RELIANCE"
+#' )
+#' last_trade_time <- reliance$last_trade_time
+#' if (is.null(last_trade_time)) {
+#'   cat("The broker does not report the last trade time.", "\n")
+#' } else {
+#'   now <- Sys.time()
+#'   seconds <- as.numeric(difftime(now, last_trade_time, units = "secs"))
+#'   cat(sprintf("Last traded %.0f seconds ago", seconds), "\n")
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' parents <- idea$parents
+#' if (is.null(parents)) {
+#'   cat("No parent is open in IDEA.", "\n")
+#' } else {
+#'   print(parents[, c(
+#'     "parent_order_id",
+#'     "synthetic_type",
+#'     "state"
+#'   )])
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' price <- round(idea$last_price * 0.97, 2)
+#' answer <- idea$buy_at_limit_price(price = price, quantity = 1, product = "cnc")
+#' tryCatch(
+#'   {
+#'     parents <- idea$parents
+#'     mine <- parents[parents$parent_order_id == answer[["parent_id"]], , drop = FALSE]
+#'     print(mine[, c(
+#'       "parent_order_id",
+#'       "synthetic_type",
+#'       "state"
+#'     )])
+#'   },
+#'   finally = {
+#'     print(idea$cancel_parent(answer[["parent_id"]])[["state"]])
+#'   }
+#' )
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' orders <- idea$orders
+#' if (is.null(orders)) {
+#'   cat("No orders in IDEA today.", "\n")
+#' } else {
+#'   columns <- c(
+#'     "order_id",
+#'     "status",
+#'     "transaction_type",
+#'     "quantity",
+#'     "price"
+#'   )
+#'   print(orders[, columns])
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' orders <- idea$orders
+#' if (is.null(orders)) {
+#'   cat("No orders in IDEA today.", "\n")
+#' } else {
+#'   print(sort(table(orders$status), decreasing = TRUE))
+#'   expired <- orders[orders$status == "EXPIRED", , drop = FALSE]
+#'   cat(nrow(expired), "expired", "\n")
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' orders <- idea$orders
+#' if (is.null(orders)) {
+#'   cat("No orders in IDEA today.", "\n")
+#' } else {
+#'   from_engine <- orders[!is.na(orders$engine_parent_id), , drop = FALSE]
+#'   cat(
+#'     nrow(from_engine),
+#'     "of",
+#'     nrow(orders),
+#'     "orders came from a parent",
+#'     "\n"
+#'   )
+#'   print(sort(table(from_engine$leg_role), decreasing = TRUE))
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' print(idea$open_orders)
+#'
+#' infosys <- Equity$new(exchange = "nse", symbol = "INFY")
+#' open_orders <- infosys$open_orders
+#' if (is.null(open_orders)) {
+#'   cat("Nothing is waiting in the market for INFY.", "\n")
+#' } else {
+#'   open_orders$remaining <- open_orders$quantity - open_orders$filled_quantity
+#'   print(tapply(open_orders$remaining, open_orders$transaction_type, sum))
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' completed <- idea$completed_orders
+#' if (is.null(completed)) {
+#'   cat("Nothing filled in IDEA today.", "\n")
+#' } else {
+#'   print(completed[, c(
+#'     "order_id",
+#'     "transaction_type",
+#'     "average_price"
+#'   )])
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' completed <- idea$completed_orders
+#' if (is.null(completed)) {
+#'   cat("Nothing filled in IDEA today.", "\n")
+#' } else {
+#'   for (side in c(
+#'     "BUY",
+#'     "SELL"
+#'   )) {
+#'     rows <- completed[toupper(completed$transaction_type) == side, , drop = FALSE]
+#'     if (nrow(rows) == 0) {
+#'       next
+#'     }
+#'     spent <- sum(rows$average_price * rows$filled_quantity)
+#'     quantity <- sum(rows$filled_quantity)
+#'     cat(side, quantity, "at", round(spent / quantity, 4), "\n")
+#'   }
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' rejected <- idea$rejected_orders
+#' if (is.null(rejected)) {
+#'   cat("Nothing was refused in IDEA today.", "\n")
+#' } else {
+#'   for (row in FrameBuilder$new()$rows(rejected)) {
+#'     cat(row[["order_id"]], row[["broker"]], row[["status_message"]], "\n")
+#'   }
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' rejected <- idea$rejected_orders
+#' if (is.null(rejected)) {
+#'   cat("Nothing was refused in IDEA today.", "\n")
+#' } else {
+#'   print(sort(table(rejected$broker), decreasing = TRUE))
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' cancelled <- idea$cancelled_orders
+#' if (is.null(cancelled)) {
+#'   cat("Nothing was cancelled in IDEA today.", "\n")
+#' } else {
+#'   print(cancelled[, c(
+#'     "order_id",
+#'     "broker",
+#'     "price",
+#'     "order_timestamp"
+#'   )])
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' cancelled <- idea$cancelled_orders
+#' if (is.null(cancelled)) {
+#'   cat("Nothing was cancelled in IDEA today.", "\n")
+#' } else {
+#'   partly_filled <- cancelled[cancelled$filled_quantity > 0, , drop = FALSE]
+#'   cat(
+#'     nrow(partly_filled),
+#'     "of",
+#'     nrow(cancelled),
+#'     "had partly filled",
+#'     "\n"
+#'   )
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' trades <- idea$trades
+#' if (is.null(trades)) {
+#'   cat("No trades in IDEA today.", "\n")
+#' } else {
+#'   columns <- c(
+#'     "trade_id",
+#'     "order_id",
+#'     "transaction_type",
+#'     "quantity",
+#'     "price"
+#'   )
+#'   print(trades[, columns])
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' trades <- idea$trades
+#' if (is.null(trades)) {
+#'   cat("No trades in IDEA today.", "\n")
+#' } else {
+#'   totals <- tapply(trades$value, trades$transaction_type, sum)
+#'   print(totals)
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' positions <- idea$net_positions
+#' if (is.null(positions)) {
+#'   cat("Nothing is held in IDEA.", "\n")
+#' } else {
+#'   print(positions[, c(
+#'     "product",
+#'     "quantity",
+#'     "average_price",
+#'     "last_price"
+#'   )])
+#' }
+#'
+#' reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+#' positions <- reliance$net_positions
+#' if (is.null(positions)) {
+#'   cat("Nothing is held in RELIANCE.", "\n")
+#' } else {
+#'   for (row in FrameBuilder$new()$rows(positions)) {
+#'     if (row[["quantity"]] > 0) {
+#'       cat(row[["product"]], "long", row[["quantity"]], "\n")
+#'     } else if (row[["quantity"]] < 0) {
+#'       cat(row[["product"]], "short", -row[["quantity"]], "\n")
+#'     } else {
+#'       cat(row[["product"]], "flat, closed today", "\n")
+#'     }
+#'   }
+#' }
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' print(idea$day_positions)
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' day_positions <- idea$day_positions
+#' net_positions <- idea$net_positions
+#' day_count <- 0
+#' if (!is.null(day_positions)) {
+#'   day_count <- nrow(day_positions)
+#' }
+#' net_count <- 0
+#' if (!is.null(net_positions)) {
+#'   net_count <- nrow(net_positions)
+#' }
+#' cat(
+#'   sprintf("%s day rows and %s net rows", day_count, net_count),
+#'   "\n"
+#' )
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' print(idea$positions_value)
+#'
+#' symbols <- c(
+#'   "IDEA",
+#'   "RELIANCE",
+#'   "INFY"
+#' )
+#' total <- 0.0
+#' for (symbol in symbols) {
+#'   share <- Equity$new(exchange = "nse", symbol = symbol)
+#'   value <- share$positions_value
+#'   cat(symbol, value, "\n")
+#'   if (!is.null(value)) {
+#'     total <- total + value
+#'   }
+#' }
+#' cat(sprintf("Total: Rs %.2f", total), "\n")
+#'
+#' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+#'
+#' print(idea$positions_pnl)
+#'
+#' reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+#' pnl <- reliance$positions_pnl
+#' if (is.null(pnl)) {
+#'   cat("Nothing is held in RELIANCE.", "\n")
+#' } else if (pnl[["total"]] >= 0) {
+#'   cat(
+#'     sprintf(
+#'       "Up Rs %s, of which Rs %s is booked",
+#'       pnl[["total"]],
+#'       pnl[["realized"]]
+#'     ),
+#'     "\n"
+#'   )
+#' } else {
+#'   cat(
+#'     sprintf(
+#'       "Down Rs %s, of which Rs %s is booked",
+#'       -pnl[["total"]],
+#'       pnl[["realized"]]
+#'     ),
+#'     "\n"
+#'   )
+#' }
 #' }
 #' @export
 TradeableInstrument <- R6::R6Class(
@@ -926,6 +1804,12 @@ TradeableInstrument <- R6::R6Class(
     #' Every order goes through UBI's order engine, which is the only way UBI places orders. A plain `limit` order with a price of its own, `day` validity, no `synthetic` object and `after_market` `FALSE` is not sent to a broker straight away: the engine holds it as a `virtual_limit` order and sends it only once the other side of the book reaches its price, answering HTTP 202 with an outcome of `armed`, a `parent_id` and no `order_id`. Such a held order is changed with `modify_order(parent_id = ...)` and cancelled with `cancel_parent()`, and it never appears in `orders` until it has been sent. Pass `synthetic = list(type = "simple")` to send a limit order at once, which matters for an instrument that has no live quote, because the engine would hold its order for the whole day without ever sending it.
     #'
     #' A plain `market` order with no `synthetic` object and `after_market` `FALSE` is not sent as a market order either. The engine runs it as a `marketable_limit` order: a `limit` two ticks past the other side's best price, moved after that price until it fills, with whatever is left cancelled 30 seconds after it was placed. Such an order is refused with HTTP 409, and nothing is sent, when nobody is on the other side of the book, no live quote has arrived or the quote is marked stale. Pass `synthetic = list(type = "simple")` to send a real market order, which an instrument with no live quote needs.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Have UBI build a limit buy for one Vodafone Idea share without sending it, and print the request it would send.
+    #' * Place a plain limit buy 3 per cent below the market, which the order engine holds until a seller reaches the price, and cancel it.
+    #' * Describe the price rather than state it, here the third best bid, and see the price UBI works out in a dry run.
     #' @param transaction_type The character side of the order, `"buy"` or `"sell"`. UBI overrides it for a quantity reference that reduces or closes a position.
     #' @param order_type The character kind of order, `"market"`, `"limit"`, `"sl"` or `"sl-m"`.
     #' @param quantity The integer quantity in underlying units, not lots, or `NULL` when a quantity reference supplies it.
@@ -942,6 +1826,60 @@ TradeableInstrument <- R6::R6Class(
     #' @param synthetic A named list that makes the order one of UBI's synthetic order types, such as `list(type = "bracket", stop_price = 990, stop_limit_price = 988, target_price = 1010)`, or `NULL` for a plain order. The synthetic order classes, such as `BracketOrder`, build it.
     #' @return A named list with `broker`, `instrument_id`, `order_id`, `outcome`, `status_message`, `broker_response`, `skipped`, `timing_ms` and `intent_id`, and `parent_id` for an order the engine recorded, or, for a dry run, a named list with `dry_run` and the `request` UBI would have sent. The `order_id` is `NULL` unless the outcome is `accepted`. A held limit order, and a synthetic order that is waiting for a price or a time, answers with an outcome of `armed` and a `broker` and `order_id` of `NULL`. The types that send several orders at once add a `legs` list, one entry per order with its plan `path`, `instrument_id`, `outcome`, `order_id` and `status_message`, and their `outcome` is `partial` when some of those orders were accepted and some were not.
     #' @details Errors: signals `BadRequestError` when a field is invalid, the price fields do not fit the order type, or a synthetic order's own fields are wrong; `LossLockoutError` when the day's loss is past UBI's daily loss limit; `NotFoundError` when no broker has a mapping for this instrument; `ConflictError` when a quantity reference asked to reduce or close a position that is not held, a market order sent as a marketable limit found nobody on the other side of the book or no fresh quote, a reduce-only order would not reduce the position, or the engine read the order too late or had already started it before a restart; `OrderRejectedError` when the broker refused the order, and the detail holds its answer; `RateLimitError` when the broker's daily order cap has no room for this order; `ServiceUnavailableError` when no broker could take the order, the order engine is not running, or a price reference could not be resolved; `OrderOutcomeUnknownError` when the order was sent but its outcome is unknown, so read the order book, or `Account$intent()` with the detail's `intent_id`, before sending it again; and another `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #'
+    #' price <- round(idea$last_price * 0.97, 2)
+    #' answer <- idea$place_order(
+    #'   transaction_type = "buy",
+    #'   order_type = "limit",
+    #'   quantity = 1,
+    #'   product = "cnc",
+    #'   price = price,
+    #'   dry_run = TRUE
+    #' )
+    #' print(answer)
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #'
+    #' price <- round(idea$last_price * 0.97, 2)
+    #' answer <- idea$place_order(
+    #'   transaction_type = "buy",
+    #'   order_type = "limit",
+    #'   quantity = 1,
+    #'   product = "cnc",
+    #'   price = price
+    #' )
+    #' tryCatch(
+    #'   {
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["parent_id"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'   },
+    #'   finally = {
+    #'     print(idea$cancel_parent(answer[["parent_id"]])[["state"]])
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #'
+    #' answer <- idea$place_order(
+    #'   transaction_type = "buy",
+    #'   order_type = "limit",
+    #'   quantity = 1,
+    #'   product = "mis",
+    #'   price_reference = list(
+    #'     kind = "bid_level",
+    #'     level = 3
+    #'   ),
+    #'   dry_run = TRUE
+    #' )
+    #' print(answer)
+    #' }
     place_order = function(
       transaction_type,
       order_type,
@@ -998,6 +1936,11 @@ TradeableInstrument <- R6::R6Class(
     #' An order the engine is still holding, such as a plain limit order waiting for the other side to reach its price, has no broker order id yet. Name it by the `parent_id` that `place_order()` answered with instead of `order_id`; only its `price` and `quantity` can change, and nothing is sent to a broker.
     #'
     #' A part of a `plan` order that has not sent anything yet, such as a bracket's stop before the entry fills, is named by the plan's `parent_id` and the part's path in `part`, such as `"root.each_fill.children.0"`, as the parent's `parameters.parts` lists it. Its `price`, `trigger_price` and `quantity` can change, and it keeps the new values until its turn comes, without anything being sent to a broker. Only a part with a fixed price, a plain limit or a native stop, takes a price, and only a stop takes a trigger price.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Lower the price of a held limit buy from 3 to 4 per cent below the market, naming it by its parent id, then cancel it.
+    #' * Send a limit buy 3 per cent below the market to the broker at once, wait for it to reach the order book, lower its price by a tick, and cancel it.
     #' @param order_id The character id the broker gave the order, as `place_order()` returned it, or `NULL` when naming a held order by `parent_id`.
     #' @param quantity The integer new total quantity in underlying units, counting what is already filled, or `NULL` to leave it.
     #' @param price The numeric new limit price in rupees, or `NULL` to leave it.
@@ -1011,6 +1954,145 @@ TradeableInstrument <- R6::R6Class(
     #' @param part The character path of a part of a plan that has not been sent, such as `"root.each_fill.children.0"`, given with `parent_id`, or `NULL`.
     #' @return A named list with `broker`, `order_id`, `instrument_id`, `status_before_modify`, `outcome`, `status_message`, `broker_response` and `timing_ms`, and `parent_id` and `synthetic_type` for a leg of a synthetic order, or, for a dry run, a named list with `dry_run` and the `request` UBI would have sent. A held order answers with `parent_id`, `synthetic_type`, `held` set to `TRUE`, the new `price` and `quantity`, and an `outcome` of `accepted`. A part of a plan answers with `parent_id`, `synthetic_type`, `part`, its `state`, the new `price`, `trigger_price` and `quantity`, and an `outcome` of `accepted`.
     #' @details Errors: signals `BadRequestError` when no field was given to change, a field is invalid or is one this broker cannot change, or a plan part works its price out from the market or is not a stop and was given a price or trigger price it cannot take; `NotFoundError` when no broker's order book holds this order id, the engine holds no parent with this parent id, or the plan has no part at this path; `ConflictError` when the order is already complete, cancelled, rejected or expired, two brokers hold the id and the detail lists them under `brokers`, a leg of a synthetic order was asked to change a field other than its price, trigger price or quantity, a held order or plan part has already been sent, when the detail names its `broker` and `order_id`, or a plan part is sized by an earlier part's fills, is kept whole, or closes a position and was asked to grow; `OrderRejectedError` when the broker refused the change, and the detail holds its answer; `ServiceUnavailableError` when the broker's order rate budget was full, so the change was not sent; `OrderOutcomeUnknownError` when the change was sent but its outcome is unknown; and another `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' price <- round(idea$last_price * 0.97, 2)
+    #' answer <- idea$buy_at_limit_price(price = price, quantity = 1, product = "cnc")
+    #' parent_id <- answer[["parent_id"]]
+    #'
+    #' tryCatch(
+    #'   {
+    #'     new_price <- round(idea$last_price * 0.96, 2)
+    #'     changed <- idea$modify_order(parent_id = parent_id, price = new_price)
+    #'     cat(changed[["outcome"]], changed[["price"]], changed[["held"]], "\n")
+    #'   },
+    #'   finally = {
+    #'     print(idea$cancel_parent(parent_id)[["state"]])
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     price <- round(idea$last_price * 0.97, 2)
+    #'     answer <- idea$buy_at_limit_price(
+    #'       price = price,
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       hold = FALSE
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     order_id <- answer[["order_id"]]
+    #'     cat(answer[["outcome"]], answer[["broker"]], order_id, "\n")
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       open_orders <- idea$open_orders
+    #'       if (!is.null(open_orders)) {
+    #'         if (order_id %in% open_orders$order_id) {
+    #'           break
+    #'         }
+    #'       }
+    #'     }
+    #'     changed <- idea$modify_order(
+    #'       order_id = order_id,
+    #'       price = round(price - 0.01, 2)
+    #'     )
+    #'     cat(changed[["broker"]], changed[["outcome"]], "\n")
+    #'     print(idea$cancel_order(order_id)[["outcome"]])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     modify_order = function(
       order_id = NULL,
       quantity = NULL,
@@ -1056,11 +2138,251 @@ TradeableInstrument <- R6::R6Class(
     #' Those order books are copies that UBI's own collectors refresh every few seconds, so an order placed a moment ago is not in them yet and signals `NotFoundError`. Wait for the order to appear in `orders` before cancelling it.
     #'
     #' An order that is a leg of one of UBI's synthetic orders is cancelled through the engine, so the order type knows about it, but the synthetic order itself carries on. Use `cancel_parent()` to stop a synthetic order, or to cancel an order the engine is still holding, which has no broker order id.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Send a limit buy 3 per cent below the market to the broker at once, wait for it to reach the order book, and cancel it.
+    #' * Look at the cancel request UBI would send in a dry run first, then cancel a resting sell 3 per cent above the market for real.
     #' @param order_id The character id the broker gave the order, as `place_order()` returned it.
     #' @param broker The character name of the broker holding the order, which is needed only after a `ConflictError` reporting that two brokers share the id, or `NULL`.
     #' @param dry_run A logical that is `TRUE` to have UBI build the broker's request and return it without sending it.
     #' @return A named list with `broker`, `order_id`, `status_before_cancel`, `outcome`, `status_message`, `broker_response` and `timing_ms`, and `parent_id` and `synthetic_type` for a leg of a synthetic order, or, for a dry run, a named list with `dry_run` and the `request` UBI would have sent.
     #' @details Errors: signals `BadRequestError` when the order id, broker or dry run flag is malformed; `NotFoundError` when no broker's order book holds this order id; `ConflictError` when the order is already complete, cancelled, rejected or expired, or two brokers hold the id and the detail lists them under `brokers`; `OrderRejectedError` when the broker refused the cancellation, and the detail holds its answer; `ServiceUnavailableError` when the broker's order rate budget was full, so the cancellation was not sent; `OrderOutcomeUnknownError` when the cancellation was sent but its outcome is unknown; and another `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     price <- round(idea$last_price * 0.97, 2)
+    #'     answer <- idea$buy_at_limit_price(
+    #'       price = price,
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       hold = FALSE
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     order_id <- answer[["order_id"]]
+    #'     cat(answer[["outcome"]], answer[["broker"]], order_id, "\n")
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       open_orders <- idea$open_orders
+    #'       if (!is.null(open_orders)) {
+    #'         if (order_id %in% open_orders$order_id) {
+    #'           break
+    #'         }
+    #'       }
+    #'     }
+    #'     cancelled <- idea$cancel_order(order_id)
+    #'     cat(cancelled[["broker"]], cancelled[["outcome"]], "\n")
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     price <- round(idea$last_price * 1.03, 2)
+    #'     answer <- idea$sell_at_limit_price(
+    #'       price = price,
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       hold = FALSE
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     order_id <- answer[["order_id"]]
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       open_orders <- idea$open_orders
+    #'       if (!is.null(open_orders)) {
+    #'         if (order_id %in% open_orders$order_id) {
+    #'           break
+    #'         }
+    #'       }
+    #'     }
+    #'     print(idea$cancel_order(order_id, dry_run = TRUE))
+    #'     print(idea$cancel_order(order_id)[["outcome"]])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     cancel_order = function(order_id, broker = NULL, dry_run = FALSE) {
       body <- list(
         order_id = order_id,
@@ -1077,8 +2399,161 @@ TradeableInstrument <- R6::R6Class(
     #' Cancels every order in this instrument that is still waiting, whether at a broker or held in UBI's order engine.
     #'
     #' The engine's open parents in this instrument are cancelled first, each with the orders it has resting at a broker, because a synthetic order left running could place a new order after its old ones were cancelled. Then every open order in the order book that did not belong to one of those parents is cancelled in one request. Every order and parent is attempted even when an earlier one fails, and a failure is reported in the returned frame rather than signalled, so one order that can no longer be cancelled does not leave the rest of them open.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Place a held limit buy and a limit buy sent to the broker, then cancel everything still waiting in Vodafone Idea in one call.
+    #' * Place two held limit orders on either side of the market, cancel them together, and check that no parent is left open.
     #' @return A `data.frame` with one row per parent or order, holding `parent_id`, `order_id`, `broker`, `cancelled` and `error`, where `parent_id` is `NA` for an order cancelled on its own, `order_id` and `broker` are `NA` for a parent, and `error` is `NA` for a cancel that was accepted and the status and message of the failure otherwise, or `NULL` when nothing in this instrument is waiting.
     #' @details Errors: signals `BrokerError` when no broker's order book could be read; `ServiceUnavailableError` when UBI's order book document is missing or too old to serve, or UBI's parents could not be read; and another `UnifiedBrokerInterfaceError` subclass when the order book or the parents could not be read for any other reason, or the list of cancels was refused whole. A failure to cancel one order or parent is reported in the frame instead.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     held <- idea$buy_at_limit_price(
+    #'       price = round(idea$last_price * 0.97, 2),
+    #'       quantity = 1,
+    #'       product = "cnc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- held
+    #'     price <- round(idea$last_price * 0.96, 2)
+    #'     answer <- idea$buy_at_limit_price(
+    #'       price = price,
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       hold = FALSE
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     order_id <- answer[["order_id"]]
+    #'     cat(answer[["outcome"]], answer[["broker"]], order_id, "\n")
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       open_orders <- idea$open_orders
+    #'       if (!is.null(open_orders)) {
+    #'         if (order_id %in% open_orders$order_id) {
+    #'           break
+    #'         }
+    #'       }
+    #'     }
+    #'     outcomes <- idea$cancel_open_orders()
+    #'     print(outcomes[, c(
+    #'       "parent_id",
+    #'       "order_id",
+    #'       "cancelled",
+    #'       "error"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #'
+    #' last_price <- idea$last_price
+    #' idea$buy_at_limit_price(
+    #'   price = round(last_price * 0.97, 2),
+    #'   quantity = 1,
+    #'   product = "mis"
+    #' )
+    #' idea$sell_at_limit_price(
+    #'   price = round(last_price * 1.03, 2),
+    #'   quantity = 1,
+    #'   product = "mis"
+    #' )
+    #' outcomes <- idea$cancel_open_orders()
+    #' cat(nrow(outcomes), "cancelled:", outcomes$cancelled, "\n")
+    #' cat("Open parents left:", "\n")
+    #' print(idea$parents)
+    #' }
     cancel_open_orders = function() {
       outcomes <- list()
       cancelled_parent_ids <- character(0)
@@ -1126,9 +2601,40 @@ TradeableInstrument <- R6::R6Class(
     #' Reads one of the order engine's parents, whether or not it has finished.
     #'
     #' UBI finds the parent by its id alone, so this does not check that it belongs to this instrument.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Read a held limit buy back from the order engine, then cancel it.
+    #' * Read a parent again after cancelling it, which works because the engine keeps finished parents too.
     #' @param parent_id The character `parent_id` that `place_order()` answered with.
     #' @return A named list holding the parent as the engine keeps it, with `parent_order_id`, `synthetic_type`, `state`, `instrument_id`, the caller's `body`, the type's `parameters` and one entry per leg under `legs`.
     #' @details Errors: signals `NotFoundError` when the order engine holds no parent with this id; `ServiceUnavailableError` when UBI's parents could not be read; and another `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' price <- round(idea$last_price * 0.97, 2)
+    #' answer <- idea$buy_at_limit_price(price = price, quantity = 1, product = "cnc")
+    #' parent_id <- answer[["parent_id"]]
+    #'
+    #' tryCatch(
+    #'   {
+    #'     held <- idea$parent(parent_id)
+    #'     cat(held[["synthetic_type"]], held[["state"]], "\n")
+    #'     print(held[["body"]])
+    #'   },
+    #'   finally = {
+    #'     idea$cancel_parent(parent_id)
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' price <- round(idea$last_price * 0.97, 2)
+    #' answer <- idea$buy_at_limit_price(price = price, quantity = 1, product = "cnc")
+    #' parent_id <- answer[["parent_id"]]
+    #'
+    #' idea$cancel_parent(parent_id)
+    #' print(idea$parent(parent_id)[["state"]])
+    #' }
     parent = function(parent_id) {
       private$unified_broker_interface$get(
         INSTRUMENTS_ORDER_PARENTS_PATH,
@@ -1146,11 +2652,40 @@ TradeableInstrument <- R6::R6Class(
     #' With `part`, only that part of a `plan` order is cancelled, named by its path, such as `"root.each_fill.children.0"` for a bracket's stop, as the parent's `parameters.parts` lists it. A part whose turn has not come is never sent, a part waiting on its trigger is ended at once, and a part that has sent orders sends no more pieces and has each of its resting orders cancelled; the rest of the plan carries on, reacting as it does to that part finishing.
     #'
     #' When a broker refuses the cancel of one leg, or its outcome is unknown, UBI answers HTTP 207, which is returned rather than signalled, with the parent's `state` as `cancelling` rather than `cancelled`. The parent no longer acts, and becomes `cancelled` once the broker reports that leg finished, so read `cancelled_legs` to see which one may still be live, and call this again to retry it.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Cancel a held limit buy and print the cancelled parent's state and legs.
+    #' * Show that a parent that has already finished cannot be cancelled a second time.
     #' @param parent_id The character `parent_id` that `place_order()` answered with.
     #' @param part The character path of one part of a plan to cancel, or `NULL` to cancel the whole parent.
     #' @param dry_run A logical that is `TRUE` to have UBI say what would be cancelled, under `resting_legs` for a whole parent or `orders` for a part, without cancelling anything.
     #' @return A named list with `parent_id`, `synthetic_type`, `state`, `intent_id` and `cancelled_legs`, one entry per leg with its `leg_id`, `broker`, `order_id`, `outcome` and `status_message`. A part answers instead with `parent_id`, `synthetic_type`, `part`, its `state`, `outcome`, `status_message`, `intent_id` and `orders`, where each order says in `cancel_accepted` whether its broker accepted the cancel, and HTTP 207 with an `outcome` of `partial` or `rejected` is returned rather than signalled.
     #' @details Errors: signals `BadRequestError` when the parent id or part path is malformed; `NotFoundError` when the order engine holds no parent with this id, or the plan has no part at this path; `ConflictError` when the parent or part has already finished, or the part is kept whole and has not started, or the parent is not a plan and was given a part; `ServiceUnavailableError` when the order engine is not running; `OrderOutcomeUnknownError` when the engine did not answer in time; and another `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' price <- round(idea$last_price * 0.97, 2)
+    #' answer <- idea$buy_at_limit_price(price = price, quantity = 1, product = "cnc")
+    #' parent_id <- answer[["parent_id"]]
+    #'
+    #' cancelled <- idea$cancel_parent(parent_id)
+    #' cat(cancelled[["state"]], cancelled[["synthetic_type"]], "\n")
+    #' print(cancelled[["cancelled_legs"]])
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' price <- round(idea$last_price * 0.97, 2)
+    #' answer <- idea$buy_at_limit_price(price = price, quantity = 1, product = "cnc")
+    #' parent_id <- answer[["parent_id"]]
+    #'
+    #' idea$cancel_parent(parent_id)
+    #' tryCatch(
+    #'   idea$cancel_parent(parent_id),
+    #'   ConflictError = function(error) {
+    #'     cat("Refused:", conditionMessage(error), "\n")
+    #'   }
+    #' )
+    #' }
     cancel_parent = function(parent_id, part = NULL, dry_run = FALSE) {
       body <- list(
         parent_id = parent_id,
@@ -1165,9 +2700,150 @@ TradeableInstrument <- R6::R6Class(
 
     #' @description
     #' Today's broker orders that one of the order engine's parents placed.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Show that a held limit buy has placed no broker order yet, then cancel it.
+    #' * Send a limit buy to the broker at once and list the broker order its parent placed, then cancel it.
     #' @param parent_id The character `parent_id` that `place_order()` answered with.
     #' @return A `data.frame` shaped like `orders`, whose `leg_role` column says what each order was to the parent, such as `entry`, `stop` or `target`, or `NULL` when the parent has placed nothing that the order book shows yet.
     #' @details Errors: signals `BrokerError` when no broker's order book could be read; `ServiceUnavailableError` when UBI's order book document is missing or too old to serve; and another `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' price <- round(idea$last_price * 0.97, 2)
+    #' answer <- idea$buy_at_limit_price(price = price, quantity = 1, product = "cnc")
+    #' parent_id <- answer[["parent_id"]]
+    #'
+    #' tryCatch(
+    #'   print(idea$parent_orders(parent_id)),
+    #'   finally = {
+    #'     idea$cancel_parent(parent_id)
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     price <- round(idea$last_price * 0.97, 2)
+    #'     answer <- idea$buy_at_limit_price(
+    #'       price = price,
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       hold = FALSE
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     order_id <- answer[["order_id"]]
+    #'     cat(answer[["outcome"]], answer[["broker"]], order_id, "\n")
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       open_orders <- idea$open_orders
+    #'       if (!is.null(open_orders)) {
+    #'         if (order_id %in% open_orders$order_id) {
+    #'           break
+    #'         }
+    #'       }
+    #'     }
+    #'     legs <- idea$parent_orders(answer[["parent_id"]])
+    #'     print(legs[, c(
+    #'       "order_id",
+    #'       "leg_role",
+    #'       "status",
+    #'       "price"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     parent_orders = function(parent_id) {
       rows <- private$unified_broker_interface$get(
         INSTRUMENTS_ORDER_DETAILS_PATH,
@@ -1180,9 +2856,128 @@ TradeableInstrument <- R6::R6Class(
 
     #' @description
     #' Today's trades in the broker orders that one of the order engine's parents placed.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Show that a held limit buy has no trades, then cancel it.
+    #' * Buy one Vodafone Idea share at once with a marketable limit as an intraday order, list the trades its parent made, which is `NULL` until the broker's trade book links them to the parent, and close the position again.
     #' @param parent_id The character `parent_id` that `place_order()` answered with.
     #' @return A `data.frame` shaped like `trades`, or `NULL` when none of the parent's orders has traded.
     #' @details Errors: signals `BrokerError` when no broker's trade book could be read; `ServiceUnavailableError` when UBI's trade book document is missing or too old to serve; and another `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' price <- round(idea$last_price * 0.97, 2)
+    #' answer <- idea$buy_at_limit_price(price = price, quantity = 1, product = "cnc")
+    #' parent_id <- answer[["parent_id"]]
+    #'
+    #' tryCatch(
+    #'   print(idea$parent_trades(parent_id)),
+    #'   finally = {
+    #'     idea$cancel_parent(parent_id)
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     bought <- idea$buy_at_marketable_price(quantity = 1, product = "mis")
+    #'     answers[[length(answers) + 1]] <- bought
+    #'     Sys.sleep(3)
+    #'     print(idea$parent_trades(bought[["parent_id"]]))
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     parent_trades = function(parent_id) {
       rows <- private$unified_broker_interface$get(
         INSTRUMENTS_ORDER_TRADES_PATH,
@@ -1199,6 +2994,12 @@ TradeableInstrument <- R6::R6Class(
     #' A market order takes the best price on offer and fills straight away while the market is open. The price is therefore not known before the order is sent, and in a thin book it can be a good deal worse than the last traded price.
     #'
     #' UBI's order engine does not send this to a broker as a market order. It sends a `limit` two ticks past the best offer, moves it after that price on every tick until it fills, and cancels whatever has not filled 30 seconds after it was placed, so the order cannot fill far from the price that was showing. UBI refuses the order with HTTP 409, and sends nothing, when nobody is offering, no live quote has arrived or the quote is marked stale. An after-market order is always sent as a market order. Pass `as_marketable_limit = FALSE` to send a real market order at once, which an instrument with no live quote needs, and use `tradingmachine.orders.marketable_limit.MarketableLimitOrder` to choose a different buffer or time. Some brokers refuse a market order sent through an API outright: on 2026-10-06 Flattrade answered `ALGO_CHK: MKT Order type not allowed for API order`, which raises `OrderRejectedError`.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Buy one Vodafone Idea share at the market as an intraday order, print the price it filled at, and close it again through `reduce_position()`, which UBI routes against the broker holding the position, until the position is back where it started.
+    #' * Do the same round trip with a tag on the buy, so the order can be picked out of the order book later.
+    #' * Try the same round trip with a real market order, which UBI sends to the broker at once rather than as a limit following the book, and report the broker's refusal when it does not accept market orders from an API.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1207,6 +3008,357 @@ TradeableInstrument <- R6::R6Class(
     #' @param as_marketable_limit A logical that is `TRUE` to let UBI's order engine send the order as a limit that follows the other side of the book for up to 30 seconds, and `FALSE` to send a market order to a broker at once.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `BadRequestError` when a field is invalid; `ConflictError` when the order was to be sent as a marketable limit and could not be priced, because nobody is offering, no live quote has arrived or the quote is marked stale; `OrderRejectedError` when the broker refused the order, which some brokers do for every real market order sent through an API; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opening <- idea$buy_at_market_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- opening
+    #'     cat("Opened:", opening[["outcome"]], opening[["broker"]], "\n")
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == opening[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "filled_quantity",
+    #'       "average_price"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opening <- idea$buy_at_market_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- opening
+    #'     cat("Opened:", opening[["outcome"]], opening[["broker"]], "\n")
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == opening[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "filled_quantity",
+    #'       "average_price"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     caught_error <- tryCatch(
+    #'       {
+    #'         opening <- idea$buy_at_market_price(
+    #'           quantity = 1,
+    #'           product = "mis",
+    #'           as_marketable_limit = FALSE
+    #'         )
+    #'         NULL
+    #'       },
+    #'       OrderRejectedError = function(error) error
+    #'     )
+    #'     if (inherits(caught_error, "OrderRejectedError")) {
+    #'       error <- caught_error
+    #'       cat(
+    #'         "The broker refused a real market order:",
+    #'         conditionMessage(error),
+    #'         "\n"
+    #'       )
+    #'       opening <- NULL
+    #'     }
+    #'     if (!is.null(opening)) {
+    #'       answers[[length(answers) + 1]] <- opening
+    #'       cat("Opened:", opening[["outcome"]], opening[["broker"]], "\n")
+    #'       Sys.sleep(3)
+    #'       orders <- idea$orders
+    #'       mine <- orders[orders$order_id == opening[["order_id"]], , drop = FALSE]
+    #'       print(mine[, c(
+    #'         "status",
+    #'         "filled_quantity",
+    #'         "average_price"
+    #'       )])
+    #'     }
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_market_price = function(
       quantity,
       product,
@@ -1239,6 +3391,12 @@ TradeableInstrument <- R6::R6Class(
     #' A market order takes the best price being bid and fills straight away while the market is open. The price is therefore not known before the order is sent, and in a thin book it can be a good deal worse than the last traded price.
     #'
     #' UBI's order engine does not send this to a broker as a market order. It sends a `limit` two ticks past the best bid, moves it after that price on every tick until it fills, and cancels whatever has not filled 30 seconds after it was placed, so the order cannot fill far from the price that was showing. UBI refuses the order with HTTP 409, and sends nothing, when nobody is bidding, no live quote has arrived or the quote is marked stale. An after-market order is always sent as a market order. Pass `as_marketable_limit = FALSE` to send a real market order at once, which an instrument with no live quote needs, and use `tradingmachine.orders.marketable_limit.MarketableLimitOrder` to choose a different buffer or time. Some brokers refuse a market order sent through an API outright: on 2026-10-06 Flattrade answered `ALGO_CHK: MKT Order type not allowed for API order`, which raises `OrderRejectedError`.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Sell one Vodafone Idea share short at the market as an intraday order, print the price it filled at, and buy it back through `reduce_position()` until the position is back where it started.
+    #' * Do the same round trip with a tag on the sale.
+    #' * Try the same round trip with a real market order, which UBI sends to the broker at once rather than as a limit following the book, and report the broker's refusal when it does not accept market orders from an API.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1247,6 +3405,357 @@ TradeableInstrument <- R6::R6Class(
     #' @param as_marketable_limit A logical that is `TRUE` to let UBI's order engine send the order as a limit that follows the other side of the book for up to 30 seconds, and `FALSE` to send a market order to a broker at once.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `BadRequestError` when a field is invalid; `ConflictError` when the order was to be sent as a marketable limit and could not be priced, because nobody is bidding, no live quote has arrived or the quote is marked stale; `OrderRejectedError` when the broker refused the order, which some brokers do for every real market order sent through an API; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opening <- idea$sell_at_market_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- opening
+    #'     cat("Opened:", opening[["outcome"]], opening[["broker"]], "\n")
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == opening[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "filled_quantity",
+    #'       "average_price"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opening <- idea$sell_at_market_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- opening
+    #'     cat("Opened:", opening[["outcome"]], opening[["broker"]], "\n")
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == opening[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "filled_quantity",
+    #'       "average_price"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     caught_error <- tryCatch(
+    #'       {
+    #'         opening <- idea$sell_at_market_price(
+    #'           quantity = 1,
+    #'           product = "mis",
+    #'           as_marketable_limit = FALSE
+    #'         )
+    #'         NULL
+    #'       },
+    #'       OrderRejectedError = function(error) error
+    #'     )
+    #'     if (inherits(caught_error, "OrderRejectedError")) {
+    #'       error <- caught_error
+    #'       cat(
+    #'         "The broker refused a real market order:",
+    #'         conditionMessage(error),
+    #'         "\n"
+    #'       )
+    #'       opening <- NULL
+    #'     }
+    #'     if (!is.null(opening)) {
+    #'       answers[[length(answers) + 1]] <- opening
+    #'       cat("Opened:", opening[["outcome"]], opening[["broker"]], "\n")
+    #'       Sys.sleep(3)
+    #'       orders <- idea$orders
+    #'       mine <- orders[orders$order_id == opening[["order_id"]], , drop = FALSE]
+    #'       print(mine[, c(
+    #'         "status",
+    #'         "filled_quantity",
+    #'         "average_price"
+    #'       )])
+    #'     }
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_market_price = function(
       quantity,
       product,
@@ -1279,6 +3788,11 @@ TradeableInstrument <- R6::R6Class(
     #' A limit buy never pays more than the price given. It waits in the market until someone sells at that price or lower, and it may never fill at all.
     #'
     #' UBI's order engine holds a `day` limit order that is not an after-market order rather than resting it at a broker, and sends it only once the other side of the book reaches the price, so an order that never fills costs no order messages. Until then `place_order` answers with an outcome of `armed` and a `parent_id` rather than an `order_id`, the order is not in `orders` but in `parents`, and it is changed with `modify_order(parent_id = ...)` and cancelled with `cancel_parent`.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Bid for one Vodafone Idea share 3 per cent below the market, which the order engine holds until a seller reaches the price, and cancel it.
+    #' * Send the bid to the broker at once instead of letting the engine hold it, wait for it to rest in the order book, and cancel it.
     #' @param price The numeric limit price in rupees.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
@@ -1288,6 +3802,136 @@ TradeableInstrument <- R6::R6Class(
     #' @param hold A logical that is `TRUE` to let UBI's order engine hold a `day` order until the other side of the book reaches the price, and `FALSE` to send it to a broker at once. An after-market order is always sent at once, whatever this says. Pass `FALSE` for an instrument with no live quote, whose order the engine would otherwise hold all day without sending.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' price <- round(idea$last_price * 0.97, 2)
+    #' answer <- idea$buy_at_limit_price(price = price, quantity = 1, product = "cnc")
+    #' parent_id <- answer[["parent_id"]]
+    #'
+    #' tryCatch(
+    #'   cat(answer[["outcome"]], "at", price, "as parent", parent_id, "\n"),
+    #'   finally = {
+    #'     print(idea$cancel_parent(parent_id)[["state"]])
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     price <- round(idea$last_price * 0.97, 2)
+    #'     answer <- idea$buy_at_limit_price(
+    #'       price = price,
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       hold = FALSE
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     order_id <- answer[["order_id"]]
+    #'     cat(answer[["outcome"]], answer[["broker"]], order_id, "\n")
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       open_orders <- idea$open_orders
+    #'       if (!is.null(open_orders)) {
+    #'         if (order_id %in% open_orders$order_id) {
+    #'           break
+    #'         }
+    #'       }
+    #'     }
+    #'     print(idea$cancel_order(order_id)[["outcome"]])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_limit_price = function(
       price,
       quantity,
@@ -1322,6 +3966,11 @@ TradeableInstrument <- R6::R6Class(
     #' A limit sell never accepts less than the price given. It waits in the market until someone buys at that price or higher, and it may never fill at all.
     #'
     #' UBI's order engine holds a `day` limit order that is not an after-market order rather than resting it at a broker, and sends it only once the other side of the book reaches the price, so an order that never fills costs no order messages. Until then `place_order` answers with an outcome of `armed` and a `parent_id` rather than an `order_id`, the order is not in `orders` but in `parents`, and it is changed with `modify_order(parent_id = ...)` and cancelled with `cancel_parent`.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Offer one Vodafone Idea share 3 per cent above the market as an intraday order, which the order engine holds until a buyer reaches the price, and cancel it.
+    #' * Send the offer to the broker at once with a tag, wait for it to rest in the order book, and cancel it.
     #' @param price The numeric limit price in rupees.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
@@ -1331,6 +3980,145 @@ TradeableInstrument <- R6::R6Class(
     #' @param hold A logical that is `TRUE` to let UBI's order engine hold a `day` order until the other side of the book reaches the price, and `FALSE` to send it to a broker at once. An after-market order is always sent at once, whatever this says. Pass `FALSE` for an instrument with no live quote, whose order the engine would otherwise hold all day without sending.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #'
+    #' price <- round(idea$last_price * 1.03, 2)
+    #' answer <- idea$sell_at_limit_price(price = price, quantity = 1, product = "mis")
+    #' tryCatch(
+    #'   {
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       "at",
+    #'       price,
+    #'       "as parent",
+    #'       answer[["parent_id"]],
+    #'       "\n"
+    #'     )
+    #'   },
+    #'   finally = {
+    #'     print(idea$cancel_parent(answer[["parent_id"]])[["state"]])
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     price <- round(idea$last_price * 1.03, 2)
+    #'     answer <- idea$sell_at_limit_price(
+    #'       price = price,
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples",
+    #'       hold = FALSE
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     order_id <- answer[["order_id"]]
+    #'     cat(answer[["outcome"]], order_id, "\n")
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       open_orders <- idea$open_orders
+    #'       if (!is.null(open_orders)) {
+    #'         if (order_id %in% open_orders$order_id) {
+    #'           break
+    #'         }
+    #'       }
+    #'     }
+    #'     print(idea$cancel_order(order_id)[["outcome"]])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_limit_price = function(
       price,
       quantity,
@@ -1363,6 +4151,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys patiently, joining the queue at the highest price anyone is bidding.
     #'
     #' This is the patient side of the pair. It prices the order alongside everyone already waiting at the best price on its own side of the book, so it saves the spread but only fills when the market comes to it.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Bid for one Vodafone Idea share at the best bid as an intraday order, then cancel it, closing any share that filled in the meantime.
+    #' * Send the same bid at the best bid as an immediate-or-cancel order, which the exchange cancels at once unless a seller is already there.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1370,6 +4163,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_best_bid_price = function(
       quantity,
       product,
@@ -1397,6 +4423,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys at once, by crossing the spread to the lowest price anyone is offering.
     #'
     #' This is the aggressive side of the pair. It prices the order where the other side of the market already is, so it fills immediately against whoever is waiting there, and it pays the spread for that certainty.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Buy one Vodafone Idea share at once with a limit at the best offer as an immediate-or-cancel intraday order, then sell it straight back.
+    #' * Buy one share with a limit at the best offer as an ordinary day order with a tag, cancel it if it is still resting, and sell back whatever filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1404,6 +4435,240 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_best_offer_price = function(
       quantity,
       product,
@@ -1431,6 +4696,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells patiently, joining the queue at the lowest price anyone is offering.
     #'
     #' This is the patient side of the pair. It prices the order alongside everyone already waiting at the best price on its own side of the book, so it saves the spread but only fills when the market comes to it.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Offer one Vodafone Idea share at the best offer as an intraday short sale, then cancel it, buying back any share that sold in the meantime.
+    #' * Send the same offer at the best offer with a tag, so it can be picked out of the order book later, and cancel it.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1438,6 +4708,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_best_offer_price = function(
       quantity,
       product,
@@ -1465,6 +4968,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells at once, by crossing the spread to the highest price anyone is bidding.
     #'
     #' This is the aggressive side of the pair. It prices the order where the other side of the market already is, so it fills immediately against whoever is waiting there, and it pays the spread for that certainty.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Sell one Vodafone Idea share short at once with a limit at the best bid as an immediate-or-cancel intraday order, then buy it straight back.
+    #' * Sell one share short with a limit at the best bid as an ordinary day order with a tag, cancel it if it is still resting, and buy back whatever filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1472,6 +4980,240 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_best_bid_price = function(
       quantity,
       product,
@@ -1499,6 +5241,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys halfway between the best bid and the best offer.
     #'
     #' The mid price sits inside the spread, where nobody is waiting, so the order is better than joining its own side of the book and cheaper than crossing to the other. It fills only if the market moves that far. UBI works the midpoint out when it sends the order and rounds it to the tick, down for a buy and up for a sell, so the order never crosses the spread.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Bid for one Vodafone Idea share at the mid price as an intraday order, then cancel it, closing any share that filled in the meantime.
+    #' * Send the same bid at the mid price as an immediate-or-cancel order, which the exchange cancels at once unless a seller is already there.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1506,6 +5253,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_mid_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_mid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_mid_price = function(
       quantity,
       product,
@@ -1532,6 +5512,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells halfway between the best bid and the best offer.
     #'
     #' The mid price sits inside the spread, where nobody is waiting, so the order is better than joining its own side of the book and cheaper than crossing to the other. It fills only if the market moves that far. UBI works the midpoint out when it sends the order and rounds it to the tick, down for a buy and up for a sell, so the order never crosses the spread.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Offer one Vodafone Idea share at the mid price as an intraday short sale, then cancel it, buying back any share that sold in the meantime.
+    #' * Send the same offer at the mid price with a tag, so it can be picked out of the order book later, and cancel it.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1539,6 +5524,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_mid_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_mid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_mid_price = function(
       quantity,
       product,
@@ -1565,6 +5783,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys at the average price the day has traded at so far.
     #'
     #' The volume weighted average price is where the day's business has actually been done, which makes it a common benchmark to measure a fill against. It has no relation to where the book is now, so the order may cross the spread or sit far away from it. Not every broker reports it. UBI reads it when it sends the order and rounds it to the tick.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Bid for one Vodafone Idea share at today's volume weighted average price as an intraday order, which may fill or rest, then cancel whatever rests and sell back whatever filled.
+    #' * Send the same bid at today's volume weighted average price as an immediate-or-cancel order, so nothing is left resting, and sell back anything that filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1572,6 +5795,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_volume_weighted_average_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_volume_weighted_average_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_volume_weighted_average_price = function(
       quantity,
       product,
@@ -1598,6 +6054,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells at the average price the day has traded at so far.
     #'
     #' The volume weighted average price is where the day's business has actually been done, which makes it a common benchmark to measure a fill against. It has no relation to where the book is now, so the order may cross the spread or sit far away from it. Not every broker reports it. UBI reads it when it sends the order and rounds it to the tick.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Offer one Vodafone Idea share short at today's volume weighted average price as an intraday order, which may fill or rest, then cancel whatever rests and buy back whatever sold.
+    #' * Send the same offer at today's volume weighted average price as an immediate-or-cancel order, so nothing is left resting, and buy back anything that sold.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1605,6 +6066,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_volume_weighted_average_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_volume_weighted_average_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_volume_weighted_average_price = function(
       quantity,
       product,
@@ -1631,6 +6325,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys now with a limit order priced at the best offer, the price it takes to fill immediately.
     #'
     #' This is what a market order has become in India: brokers convert an API market order into a limit order with price protection, and some refuse market orders outright. A marketable limit states the cap itself, so the order fills at once up to that price and never beyond it. UBI reads the best offer when it sends the order, and `buffer_percent` moves the cap that far above it to reach deeper into the book. Pair it with `validity = "ioc"` to cancel whatever cannot fill at once.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Buy one Vodafone Idea share at once with a limit at the best offer as an immediate-or-cancel intraday order, then sell it straight back.
+    #' * Reach half a per cent past the best offer, which still fills at the best price available but tolerates the book moving, and sell back what filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1639,6 +6338,241 @@ TradeableInstrument <- R6::R6Class(
     #' @param buffer_percent The numeric percentage to move the cap past the best offer, such as 0.5, or `NULL` for no buffer. A cap too far from the market is refused by the exchange's price protection.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_marketable_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_marketable_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc",
+    #'       buffer_percent = 0.5
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_marketable_price = function(
       quantity,
       product,
@@ -1669,6 +6603,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells now with a limit order priced at the best bid, the price it takes to fill immediately.
     #'
     #' This is what a market order has become in India: brokers convert an API market order into a limit order with price protection, and some refuse market orders outright. A marketable limit states the cap itself, so the order fills at once up to that price and never beyond it. UBI reads the best bid when it sends the order, and `buffer_percent` moves the cap that far below it to reach deeper into the book. Pair it with `validity = "ioc"` to cancel whatever cannot fill at once.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Sell one Vodafone Idea share short at once with a limit at the best bid as an immediate-or-cancel intraday order, then buy it straight back.
+    #' * Reach half a per cent below the best bid, which still fills at the best price available but tolerates the book moving, and buy back what sold.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1677,6 +6616,241 @@ TradeableInstrument <- R6::R6Class(
     #' @param buffer_percent The numeric percentage to move the cap past the best bid, such as 0.5, or `NULL` for no buffer. A cap too far from the market is refused by the exchange's price protection.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_marketable_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_marketable_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc",
+    #'       buffer_percent = 0.5
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_marketable_price = function(
       quantity,
       product,
@@ -1707,6 +6881,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys with a limit order at the price the instrument last traded at.
     #'
     #' The last traded price is where the most recent deal was done, which may be on either side of the book by the time the order arrives, so the order may fill at once or rest. UBI reads it when it sends the order and rounds it to the tick.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Bid for one Vodafone Idea share at the last traded price as an intraday order, which may fill or rest, then cancel whatever rests and sell back whatever filled.
+    #' * Send the same bid at the last traded price as an immediate-or-cancel order, so nothing is left resting, and sell back anything that filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1714,6 +6893,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_last_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_last_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_last_price = function(
       quantity,
       product,
@@ -1740,6 +7152,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells with a limit order at the price the instrument last traded at.
     #'
     #' The last traded price is where the most recent deal was done, which may be on either side of the book by the time the order arrives, so the order may fill at once or rest. UBI reads it when it sends the order and rounds it to the tick.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Offer one Vodafone Idea share short at the last traded price as an intraday order, which may fill or rest, then cancel whatever rests and buy back whatever sold.
+    #' * Send the same offer at the last traded price as an immediate-or-cancel order, so nothing is left resting, and buy back anything that sold.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1747,6 +7164,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_last_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_last_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_last_price = function(
       quantity,
       product,
@@ -1773,6 +7423,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys at the second best price on the buy side of the book.
     #'
     #' This is more patient than pricing at the best level, because the order waits behind everyone at the second best price on its own side. It fills less often, and at a better price when it does.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Bid for one Vodafone Idea share at the second best bid as an intraday order, then cancel it, closing any share that filled in the meantime.
+    #' * Send the same bid at the second best bid as an immediate-or-cancel order, which the exchange cancels at once unless a seller is already there.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1780,6 +7435,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_second_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_second_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_second_best_bid_price = function(
       quantity,
       product,
@@ -1807,6 +7695,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys at the third best price on the buy side of the book.
     #'
     #' This is more patient than pricing at the best level, because the order waits behind everyone at the third best price on its own side. It fills less often, and at a better price when it does.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Bid for one Vodafone Idea share at the third best bid as an intraday order, then cancel it, closing any share that filled in the meantime.
+    #' * Send the same bid at the third best bid as an immediate-or-cancel order, which the exchange cancels at once unless a seller is already there.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1814,6 +7707,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_third_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_third_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_third_best_bid_price = function(
       quantity,
       product,
@@ -1841,6 +7967,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys at the fourth best price on the buy side of the book.
     #'
     #' This is more patient than pricing at the best level, because the order waits behind everyone at the fourth best price on its own side. It fills less often, and at a better price when it does.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Bid for one Vodafone Idea share at the fourth best bid as an intraday order, then cancel it, closing any share that filled in the meantime.
+    #' * Send the same bid at the fourth best bid as an immediate-or-cancel order, which the exchange cancels at once unless a seller is already there.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1848,6 +7979,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_fourth_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_fourth_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_fourth_best_bid_price = function(
       quantity,
       product,
@@ -1875,6 +8239,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys at the fifth best price on the buy side of the book.
     #'
     #' This is more patient than pricing at the best level, because the order waits behind everyone at the fifth best price on its own side. It fills less often, and at a better price when it does.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Bid for one Vodafone Idea share at the fifth best bid as an intraday order, then cancel it, closing any share that filled in the meantime.
+    #' * Send the same bid at the fifth best bid as an immediate-or-cancel order, which the exchange cancels at once unless a seller is already there.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1882,6 +8251,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_fifth_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_fifth_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_fifth_best_bid_price = function(
       quantity,
       product,
@@ -1909,6 +8511,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells at the second best price on the buy side of the book.
     #'
     #' This is more aggressive than pricing at the best level, because the order reaches past the front of the other side and can sweep every level down to the second. Expect a larger fill at a worse average price.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Sell one Vodafone Idea share short at once with a limit at the second best bid as an immediate-or-cancel intraday order, then buy it straight back.
+    #' * Sell one share short with a limit at the second best bid as an ordinary day order with a tag, cancel it if it is still resting, and buy back whatever filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1916,6 +8523,240 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_second_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_second_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_second_best_bid_price = function(
       quantity,
       product,
@@ -1943,6 +8784,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells at the third best price on the buy side of the book.
     #'
     #' This is more aggressive than pricing at the best level, because the order reaches past the front of the other side and can sweep every level down to the third. Expect a larger fill at a worse average price.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Sell one Vodafone Idea share short at once with a limit at the third best bid as an immediate-or-cancel intraday order, then buy it straight back.
+    #' * Sell one share short with a limit at the third best bid as an ordinary day order with a tag, cancel it if it is still resting, and buy back whatever filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1950,6 +8796,240 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_third_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_third_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_third_best_bid_price = function(
       quantity,
       product,
@@ -1977,6 +9057,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells at the fourth best price on the buy side of the book.
     #'
     #' This is more aggressive than pricing at the best level, because the order reaches past the front of the other side and can sweep every level down to the fourth. Expect a larger fill at a worse average price.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Sell one Vodafone Idea share short at once with a limit at the fourth best bid as an immediate-or-cancel intraday order, then buy it straight back.
+    #' * Sell one share short with a limit at the fourth best bid as an ordinary day order with a tag, cancel it if it is still resting, and buy back whatever filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -1984,6 +9069,240 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_fourth_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_fourth_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_fourth_best_bid_price = function(
       quantity,
       product,
@@ -2011,6 +9330,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells at the fifth best price on the buy side of the book.
     #'
     #' This is more aggressive than pricing at the best level, because the order reaches past the front of the other side and can sweep every level down to the fifth. Expect a larger fill at a worse average price.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Sell one Vodafone Idea share short at once with a limit at the fifth best bid as an immediate-or-cancel intraday order, then buy it straight back.
+    #' * Sell one share short with a limit at the fifth best bid as an ordinary day order with a tag, cancel it if it is still resting, and buy back whatever filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -2018,6 +9342,240 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_fifth_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_fifth_best_bid_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_fifth_best_bid_price = function(
       quantity,
       product,
@@ -2045,6 +9603,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys at the second best price on the sell side of the book.
     #'
     #' This is more aggressive than pricing at the best level, because the order reaches past the front of the other side and can sweep every level down to the second. Expect a larger fill at a worse average price.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Buy one Vodafone Idea share at once with a limit at the second best offer as an immediate-or-cancel intraday order, then sell it straight back.
+    #' * Buy one share with a limit at the second best offer as an ordinary day order with a tag, cancel it if it is still resting, and sell back whatever filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -2052,6 +9615,240 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_second_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_second_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_second_best_offer_price = function(
       quantity,
       product,
@@ -2079,6 +9876,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys at the third best price on the sell side of the book.
     #'
     #' This is more aggressive than pricing at the best level, because the order reaches past the front of the other side and can sweep every level down to the third. Expect a larger fill at a worse average price.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Buy one Vodafone Idea share at once with a limit at the third best offer as an immediate-or-cancel intraday order, then sell it straight back.
+    #' * Buy one share with a limit at the third best offer as an ordinary day order with a tag, cancel it if it is still resting, and sell back whatever filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -2086,6 +9888,240 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_third_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_third_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_third_best_offer_price = function(
       quantity,
       product,
@@ -2113,6 +10149,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys at the fourth best price on the sell side of the book.
     #'
     #' This is more aggressive than pricing at the best level, because the order reaches past the front of the other side and can sweep every level down to the fourth. Expect a larger fill at a worse average price.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Buy one Vodafone Idea share at once with a limit at the fourth best offer as an immediate-or-cancel intraday order, then sell it straight back.
+    #' * Buy one share with a limit at the fourth best offer as an ordinary day order with a tag, cancel it if it is still resting, and sell back whatever filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -2120,6 +10161,240 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_fourth_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_fourth_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_fourth_best_offer_price = function(
       quantity,
       product,
@@ -2147,6 +10422,11 @@ TradeableInstrument <- R6::R6Class(
     #' Buys at the fifth best price on the sell side of the book.
     #'
     #' This is more aggressive than pricing at the best level, because the order reaches past the front of the other side and can sweep every level down to the fifth. Expect a larger fill at a worse average price.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Buy one Vodafone Idea share at once with a limit at the fifth best offer as an immediate-or-cancel intraday order, then sell it straight back.
+    #' * Buy one share with a limit at the fifth best offer as an ordinary day order with a tag, cancel it if it is still resting, and sell back whatever filled.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -2154,6 +10434,240 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_fifth_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       validity = "ioc"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$buy_at_fifth_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     buy_at_fifth_best_offer_price = function(
       quantity,
       product,
@@ -2181,6 +10695,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells at the second best price on the sell side of the book.
     #'
     #' This is more patient than pricing at the best level, because the order waits behind everyone at the second best price on its own side. It fills less often, and at a better price when it does.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Offer one Vodafone Idea share at the second best offer as an intraday short sale, then cancel it, buying back any share that sold in the meantime.
+    #' * Send the same offer at the second best offer with a tag, so it can be picked out of the order book later, and cancel it.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -2188,6 +10707,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_second_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_second_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_second_best_offer_price = function(
       quantity,
       product,
@@ -2215,6 +10967,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells at the third best price on the sell side of the book.
     #'
     #' This is more patient than pricing at the best level, because the order waits behind everyone at the third best price on its own side. It fills less often, and at a better price when it does.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Offer one Vodafone Idea share at the third best offer as an intraday short sale, then cancel it, buying back any share that sold in the meantime.
+    #' * Send the same offer at the third best offer with a tag, so it can be picked out of the order book later, and cancel it.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -2222,6 +10979,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_third_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_third_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_third_best_offer_price = function(
       quantity,
       product,
@@ -2249,6 +11239,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells at the fourth best price on the sell side of the book.
     #'
     #' This is more patient than pricing at the best level, because the order waits behind everyone at the fourth best price on its own side. It fills less often, and at a better price when it does.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Offer one Vodafone Idea share at the fourth best offer as an intraday short sale, then cancel it, buying back any share that sold in the meantime.
+    #' * Send the same offer at the fourth best offer with a tag, so it can be picked out of the order book later, and cancel it.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -2256,6 +11251,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_fourth_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_fourth_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_fourth_best_offer_price = function(
       quantity,
       product,
@@ -2283,6 +11511,11 @@ TradeableInstrument <- R6::R6Class(
     #' Sells at the fifth best price on the sell side of the book.
     #'
     #' This is more patient than pricing at the best level, because the order waits behind everyone at the fifth best price on its own side. It fills less often, and at a better price when it does.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Offer one Vodafone Idea share at the fifth best offer as an intraday short sale, then cancel it, buying back any share that sold in the meantime.
+    #' * Send the same offer at the fifth best offer with a tag, so it can be picked out of the order book later, and cancel it.
     #' @param quantity The integer quantity in underlying units, not lots.
     #' @param product The character product, `cnc` for delivery, `mis` for intraday or `nrml` for carry forward.
     #' @param validity The character validity, `day` or `ioc`, or `NULL` to let UBI use `day`.
@@ -2290,6 +11523,239 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character of up to twenty letters and digits to label the order with, or `NULL`.
     #' @return The named list `place_order` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `ServiceUnavailableError` when UBI could not work the price out, because there is no live quote, the order book is not that deep or no tick size is agreed, which is what the book looks like outside market hours; `BadRequestError` when a field is invalid; `OrderRejectedError` when the broker refused the order; `UnifiedBrokerInterfaceError` when any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_fifth_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     answer <- idea$sell_at_fifth_best_offer_price(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- answer
+    #'     cat(
+    #'       answer[["outcome"]],
+    #'       answer[["broker"]],
+    #'       answer[["order_id"]],
+    #'       "\n"
+    #'     )
+    #'     Sys.sleep(3)
+    #'     orders <- idea$orders
+    #'     mine <- orders[orders$order_id == answer[["order_id"]], , drop = FALSE]
+    #'     print(mine[, c(
+    #'       "status",
+    #'       "price",
+    #'       "filled_quantity"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     sell_at_fifth_best_offer_price = function(
       quantity,
       product,
@@ -2319,6 +11785,11 @@ TradeableInstrument <- R6::R6Class(
     #' The direction follows the position you already hold: a long position is added to by buying and a short one by selling, so `transaction_type` is needed only when you hold nothing yet. Holding nothing also means there is no position to read a product from, so `product` is needed then too.
     #'
     #' Only positions held under `cnc`, `mis` and `nrml` are visible here. UBI also reports positions under `margin_trading`, `cover` and `bracket`, which come from order kinds it cannot send, and those are ignored as though they were not there.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Add one Vodafone Idea share to the intraday position with a limit a per cent above the market, so it fills at once even at a broker that refuses market orders, then add a second without naming a side, and sell both back until the position is where it started.
+    #' * Show that naming a side against the position held is refused, because a sell would reduce a long position rather than add to it.
     #' @param quantity The integer quantity to add, in underlying units and always positive, whichever way the position points.
     #' @param product The character product of the position to add to, `"cnc"`, `"mis"` or `"nrml"`, or `NULL` when only one position is held.
     #' @param transaction_type The character direction to open in, `"buy"` or `"sell"`, used only when no position is held yet.
@@ -2328,6 +11799,256 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character label of up to twenty letters and digits for the order, or `NULL`.
     #' @return The named list `place_order()` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `PositionError` when several positions are held and none was named, the direction given contradicts the position held, or nothing is held and no direction and product were given; and a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opened <- idea$add_to_position(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       transaction_type = "buy",
+    #'       price = round(idea$last_price * 1.01, 2)
+    #'     )
+    #'     answers[[length(answers) + 1]] <- opened
+    #'     cat("Opened:", opened[["outcome"]], "\n")
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       positions <- idea$net_positions
+    #'       intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'       if (sum(intraday$quantity) == start + 1) {
+    #'         break
+    #'       }
+    #'     }
+    #'     cat("Intraday quantity:", sum(intraday$quantity), "\n")
+    #'     added <- idea$add_to_position(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       price = round(idea$last_price * 1.01, 2)
+    #'     )
+    #'     answers[[length(answers) + 1]] <- added
+    #'     cat("Added:", added[["outcome"]], "\n")
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       positions <- idea$net_positions
+    #'       intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'       if (sum(intraday$quantity) == start + 2) {
+    #'         break
+    #'       }
+    #'     }
+    #'     cat("Intraday quantity:", sum(intraday$quantity), "\n")
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opened <- idea$buy_at_marketable_price(quantity = 1, product = "mis")
+    #'     answers[[length(answers) + 1]] <- opened
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       positions <- idea$net_positions
+    #'       intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'       if (sum(intraday$quantity) == start + 1) {
+    #'         break
+    #'       }
+    #'     }
+    #'     cat("Intraday quantity:", sum(intraday$quantity), "\n")
+    #'     tryCatch(
+    #'       {
+    #'         idea$add_to_position(
+    #'           quantity = 1,
+    #'           product = "mis",
+    #'           transaction_type = "sell"
+    #'         )
+    #'       },
+    #'       PositionError = function(error) {
+    #'         cat("Refused:", conditionMessage(error), "\n")
+    #'       }
+    #'     )
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     add_to_position = function(
       quantity,
       product = NULL,
@@ -2388,6 +12109,11 @@ TradeableInstrument <- R6::R6Class(
     #' UBI works the direction out from the position when it sends the order: a long position is reduced by selling and a short one by buying. It also caps the order at what is held, so asking for more than the position closes the whole position and never opens a new one the other way round.
     #'
     #' Only positions held under `cnc`, `mis` and `nrml` are visible here, for the reason given on `add_to_position()`. When no product is named, the positions are read once to find the only one held; when one is named, nothing is read here and UBI reads the positions itself.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Buy two Vodafone Idea shares intraday, reduce the position by one with a limit a per cent below the market, and sell the other back.
+    #' * Ask to reduce a one-share intraday position by five, which UBI caps at what is held, so the position closes and never turns short.
     #' @param quantity The integer largest quantity to close, in underlying units and always positive, whichever way the position points.
     #' @param product The character product of the position to reduce, `"cnc"`, `"mis"` or `"nrml"`, or `NULL` when only one position is held.
     #' @param price The numeric limit price in rupees, or `NULL` to send a market order.
@@ -2396,6 +12122,248 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character label of up to twenty letters and digits for the order, or `NULL`.
     #' @return The named list `place_order()` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `PositionError` when no product was named and nothing is held, several positions are held, or the product named is not `cnc`, `mis` or `nrml`; `ConflictError` when the product named is not held in this instrument; and another `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opened <- idea$buy_at_marketable_price(quantity = 2, product = "mis")
+    #'     answers[[length(answers) + 1]] <- opened
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       positions <- idea$net_positions
+    #'       intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'       if (sum(intraday$quantity) == start + 2) {
+    #'         break
+    #'       }
+    #'     }
+    #'     cat("Intraday quantity:", sum(intraday$quantity), "\n")
+    #'     reduced <- idea$reduce_position(
+    #'       quantity = 1,
+    #'       product = "mis",
+    #'       price = round(idea$last_price * 0.99, 2)
+    #'     )
+    #'     answers[[length(answers) + 1]] <- reduced
+    #'     cat("Reduced:", reduced[["outcome"]], "\n")
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       positions <- idea$net_positions
+    #'       intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'       if (sum(intraday$quantity) == start + 1) {
+    #'         break
+    #'       }
+    #'     }
+    #'     cat("Intraday quantity:", sum(intraday$quantity), "\n")
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' if (start != 0) {
+    #'   stop("An intraday IDEA position is already open.")
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opened <- idea$buy_at_marketable_price(quantity = 1, product = "mis")
+    #'     answers[[length(answers) + 1]] <- opened
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       positions <- idea$net_positions
+    #'       intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'       if (sum(intraday$quantity) == start + 1) {
+    #'         break
+    #'       }
+    #'     }
+    #'     cat("Intraday quantity:", sum(intraday$quantity), "\n")
+    #'     reduced <- idea$reduce_position(
+    #'       quantity = 5,
+    #'       product = "mis",
+    #'       price = round(idea$last_price * 0.99, 2)
+    #'     )
+    #'     answers[[length(answers) + 1]] <- reduced
+    #'     cat("Reduced:", reduced[["outcome"]], "\n")
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     reduce_position = function(
       quantity,
       product = NULL,
@@ -2421,6 +12389,11 @@ TradeableInstrument <- R6::R6Class(
     #' UBI reads the position when it sends the order and closes the whole of it, so a long position is sold and a short one is bought back.
     #'
     #' Only positions held under `cnc`, `mis` and `nrml` are visible here, for the reason given on `add_to_position()`. When no product is named, the positions are read once to find the only one held; when one is named, nothing is read here and UBI reads the positions itself.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Buy one Vodafone Idea share intraday and close the whole position, with a limit a per cent below the market because some brokers refuse market orders from an API.
+    #' * Close a short intraday position by buying it back, which UBI works out from the position, with a tag on the closing order.
     #' @param product The character product of the position to close, `"cnc"`, `"mis"` or `"nrml"`, or `NULL` when only one position is held.
     #' @param price The numeric limit price in rupees, or `NULL` to send a market order.
     #' @param validity The character validity, `"day"` or `"ioc"`, or `NULL` to let UBI use `"day"`.
@@ -2428,6 +12401,241 @@ TradeableInstrument <- R6::R6Class(
     #' @param tag A character label of up to twenty letters and digits for the order, or `NULL`.
     #' @return The named list `place_order()` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `PositionError` when no product was named and nothing is held, several positions are held, or the product named is not `cnc`, `mis` or `nrml`; `ConflictError` when the product named is not held in this instrument; and another `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' if (start != 0) {
+    #'   stop("An intraday IDEA position is already open.")
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opened <- idea$buy_at_marketable_price(quantity = 1, product = "mis")
+    #'     answers[[length(answers) + 1]] <- opened
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       positions <- idea$net_positions
+    #'       intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'       if (sum(intraday$quantity) == start + 1) {
+    #'         break
+    #'       }
+    #'     }
+    #'     cat("Intraday quantity:", sum(intraday$quantity), "\n")
+    #'     closed <- idea$liquidate_position(
+    #'       product = "mis",
+    #'       price = round(idea$last_price * 0.99, 2)
+    #'     )
+    #'     answers[[length(answers) + 1]] <- closed
+    #'     cat("Closed:", closed[["outcome"]], closed[["order_id"]], "\n")
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' if (start != 0) {
+    #'   stop("An intraday IDEA position is already open.")
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opened <- idea$sell_at_marketable_price(quantity = 1, product = "mis")
+    #'     answers[[length(answers) + 1]] <- opened
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       positions <- idea$net_positions
+    #'       intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'       if (sum(intraday$quantity) == start - 1) {
+    #'         break
+    #'       }
+    #'     }
+    #'     cat("Intraday quantity:", sum(intraday$quantity), "\n")
+    #'     closed <- idea$liquidate_position(
+    #'       product = "mis",
+    #'       price = round(idea$last_price * 1.01, 2),
+    #'       tag = "examples"
+    #'     )
+    #'     answers[[length(answers) + 1]] <- closed
+    #'     cat("Bought back:", closed[["outcome"]], closed[["order_id"]], "\n")
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     liquidate_position = function(
       product = NULL,
       price = NULL,
@@ -2450,12 +12658,257 @@ TradeableInstrument <- R6::R6Class(
     #' Closes every position this instrument holds, under every product.
     #'
     #' The positions are read once to list them, and each is then closed with its own order, which UBI sizes and directs from the position when it sends it. Every one is attempted even when an earlier one fails, so a single refusal does not leave the rest open. A position held under a product UBI cannot send an order for, which is `margin_trading`, `cover` or `bracket`, is reported as ignored rather than passed over in silence, and has to be closed at the broker directly.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Buy one Vodafone Idea share intraday, then close every position the share holds, under every product, and print what was done.
+    #' * Sell one share short intraday, close every position the share holds with tagged orders, and list any that could not be closed through UBI.
     #' @param price The numeric limit price in rupees for every order, or `NULL` to send market orders.
     #' @param validity The character validity, `"day"` or `"ioc"`, or `NULL` to let UBI use `"day"`.
     #' @param after_market A logical that is `TRUE` to send the orders as after-market orders.
     #' @param tag A character label of up to twenty letters and digits for the orders, or `NULL`.
     #' @return A `data.frame` with one row per position, holding `product`, `order_product`, `quantity`, `closed`, `order_id` and `error`, or `NULL` when this instrument holds no position at all.
     #' @details Errors: signals `BrokerError` when no broker's positions could be read; `ServiceUnavailableError` when UBI's positions document is missing or too old to serve; and another `UnifiedBrokerInterfaceError` subclass when the positions could not be read for any other reason. A failure to close one position is reported in the frame instead.
+    #' @examples
+    #' \dontrun{
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' if (start != 0) {
+    #'   stop("An intraday IDEA position is already open.")
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opened <- idea$buy_at_marketable_price(quantity = 1, product = "mis")
+    #'     answers[[length(answers) + 1]] <- opened
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       positions <- idea$net_positions
+    #'       intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'       if (sum(intraday$quantity) == start + 1) {
+    #'         break
+    #'       }
+    #'     }
+    #'     cat("Intraday quantity:", sum(intraday$quantity), "\n")
+    #'     outcomes <- idea$liquidate_all_positions(
+    #'       price = round(idea$last_price * 0.99, 2)
+    #'     )
+    #'     print(outcomes)
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #'
+    #' idea <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' start <- 0
+    #' positions <- idea$net_positions
+    #' if (!is.null(positions)) {
+    #'   intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'   start <- sum(intraday$quantity)
+    #' }
+    #' if (start != 0) {
+    #'   stop("An intraday IDEA position is already open.")
+    #' }
+    #' answers <- list()
+    #' tryCatch(
+    #'   {
+    #'     opened <- idea$sell_at_marketable_price(quantity = 1, product = "mis")
+    #'     answers[[length(answers) + 1]] <- opened
+    #'     for (attempt in seq_len(30)) {
+    #'       Sys.sleep(1)
+    #'       positions <- idea$net_positions
+    #'       intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'       if (sum(intraday$quantity) == start - 1) {
+    #'         break
+    #'       }
+    #'     }
+    #'     cat("Intraday quantity:", sum(intraday$quantity), "\n")
+    #'     outcomes <- idea$liquidate_all_positions(
+    #'       price = round(idea$last_price * 1.01, 2),
+    #'       tag = "examples"
+    #'     )
+    #'     print(outcomes[, c(
+    #'       "product",
+    #'       "quantity",
+    #'       "closed",
+    #'       "order_id"
+    #'     )])
+    #'     print(outcomes[!outcomes$closed, , drop = FALSE][, c(
+    #'       "product",
+    #'       "error"
+    #'     )])
+    #'   },
+    #'   finally = {
+    #'     for (answer in answers) {
+    #'       for (attempt in seq_len(3)) {
+    #'         caught_error <- tryCatch(
+    #'           {
+    #'             cancelled <- idea$cancel_parent(answer[["parent_id"]])
+    #'             NULL
+    #'           },
+    #'           ConflictError = function(error) error,
+    #'           UnifiedBrokerInterfaceError = function(error) error
+    #'         )
+    #'         if (inherits(caught_error, "ConflictError")) {
+    #'           cat("The order had already finished.", "\n")
+    #'           break
+    #'         } else if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'           error <- caught_error
+    #'           cat("Cancelling failed, trying again:", conditionMessage(error), "\n")
+    #'           Sys.sleep(2)
+    #'           next
+    #'         }
+    #'         if (cancelled[["state"]] == "cancelled") {
+    #'           cat("Cancelled what was still waiting.", "\n")
+    #'           break
+    #'         }
+    #'         Sys.sleep(2)
+    #'       }
+    #'     }
+    #'     quantity <- NA
+    #'     for (attempt in seq_len(6)) {
+    #'       Sys.sleep(5)
+    #'       caught_error <- tryCatch(
+    #'         {
+    #'           quantity <- 0
+    #'           positions <- idea$net_positions
+    #'           if (!is.null(positions)) {
+    #'             intraday <- positions[positions$product == "intraday", , drop = FALSE]
+    #'             quantity <- sum(intraday$quantity)
+    #'           }
+    #'           if (quantity == start) {
+    #'             break
+    #'           }
+    #'           difference <- as.integer(quantity - start)
+    #'           if (difference > 0) {
+    #'             price <- round(idea$last_price * 0.99, 2)
+    #'           } else {
+    #'             price <- round(idea$last_price * 1.01, 2)
+    #'           }
+    #'           if ((difference > 0) == (quantity > 0)) {
+    #'             idea$reduce_position(
+    #'               quantity = abs(difference),
+    #'               product = "mis",
+    #'               price = price
+    #'             )
+    #'           } else if (difference > 0) {
+    #'             idea$sell_at_limit_price(
+    #'               price = price,
+    #'               quantity = difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           } else {
+    #'             idea$buy_at_limit_price(
+    #'               price = price,
+    #'               quantity = -difference,
+    #'               product = "mis",
+    #'               hold = FALSE
+    #'             )
+    #'           }
+    #'           NULL
+    #'         },
+    #'         UnifiedBrokerInterfaceError = function(error) error
+    #'       )
+    #'       if (inherits(caught_error, "UnifiedBrokerInterfaceError")) {
+    #'         error <- caught_error
+    #'         quantity <- NA
+    #'         cat("Closing failed, trying again:", conditionMessage(error), "\n")
+    #'       }
+    #'     }
+    #'     if (is.na(quantity) || quantity != start) {
+    #'       stop(sprintf("The position is %s, not %s.", quantity, start))
+    #'     }
+    #'     cat("The intraday position is back at", start, "\n")
+    #'   }
+    #' )
+    #' }
     liquidate_all_positions = function(
       price = NULL,
       validity = NULL,
@@ -3136,6 +13589,11 @@ TradeableInstrument <- R6::R6Class(
 #' @description
 #' An index is followed rather than traded, so it has candles, a quote and the analysis methods but none of the order, position or order-book members of `TradeableInstrument`. Its futures and options are traded instead, through the derivative classes.
 #'
+#' The examples below start with a short tour of the class, then show its properties, in this order:
+#'
+#' * For `constituents`, print the stored members of the Nifty 50, or say that none are stored.
+#' * For `constituents`, compare the index's own day change with the day change of its stored members, when a basket is stored.
+#'
 #' @examples
 #' \dontrun{
 #' nifty <- NonTradeableInstrument$new(
@@ -3145,6 +13603,35 @@ TradeableInstrument <- R6::R6Class(
 #' )
 #' nifty$last_price
 #' members <- nifty$constituents
+#'
+#' nifty <- NonTradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equity_indices",
+#'   symbol = "NIFTY"
+#' )
+#' basket <- nifty$constituents
+#' if (is.null(basket)) {
+#'   cat("No constituents are stored for NIFTY today.", "\n")
+#' } else {
+#'   print(basket)
+#' }
+#'
+#' nifty <- NonTradeableInstrument$new(
+#'   exchange = "nse",
+#'   segment = "equity_indices",
+#'   symbol = "NIFTY"
+#' )
+#' basket <- nifty$constituents
+#' cat("Index day change:", nifty$ohlc[["change_percent"]], "\n")
+#' if (is.null(basket)) {
+#'   cat(
+#'     "No constituents are stored, so there is nothing to compare.",
+#'     "\n"
+#'   )
+#' } else {
+#'   cat("Members stored:", basket$size, "\n")
+#'   cat("Basket day change:", basket$day_change_percent, "\n")
+#' }
 #' }
 #' @export
 NonTradeableInstrument <- R6::R6Class(
@@ -3221,6 +13708,335 @@ NonTradeableInstrument <- R6::R6Class(
 #'
 #' The underlying is found in this order, and the first that applies wins. An underlying given as an object when the contract is built is kept and used as it is. Otherwise UBI's `underlying_instrument_id`, resolved from the brokers' own records, is used when UBI supplies one. Otherwise the family's default applies, from `INSTRUMENTS_UNDERLYING_SEGMENT_FOR_DERIVATIVE_SEGMENT`: an equity contract's share or index found by its symbol, the nearest future for an option on a commodity, a currency pair or a bond, and nothing for a future outside equities, whose cash underlying has no price in UBI. Nothing but the given object is stored, so the other ways look the underlying up again on every read, and `UnderlyingError` says when none of them finds one.
 #'
+#' The examples below show its properties, in this order:
+#'
+#' * For `days_to_expiry`, print how many days the nearest Nifty future has left.
+#' * For `days_to_expiry`, print the days left on every listed Reliance future.
+#' * For `expired`, show that a listed Nifty future has not expired.
+#' * For `expired`, build the oldest Nifty future UBI still knows, which has expired, and check it.
+#' * For `expiry_kind`, say whether each of the next four Nifty option expiries is a weekly or a monthly one.
+#' * For `expiry_kind`, show that a stock future is always monthly, since stocks have no weekly expiries.
+#' * For `next_expiry`, find the expiry a position in the nearest Nifty future would roll to.
+#' * For `next_expiry`, build the next Reliance future from the nearest one and compare their prices, which is the roll's cost.
+#' * For `underlying`, print what the nearest Reliance future is written on, which is looked up in UBI.
+#' * For `underlying`, give the underlying when building the contract, so the contract keeps that very object and makes no lookup.
+#' * For `underlying`, print the index a Nifty future is written on.
+#' * For `underlying_price`, print the Nifty index level beside the price of its nearest future.
+#' * For `underlying_price`, print the share price under a Reliance future, read once for a report.
+#' * For `open_interest_day_high`, print the highest open interest the nearest Nifty future reached today.
+#' * For `open_interest_day_high`, say how far today's open interest is below its high for the day, which shows positions being closed.
+#' * For `open_interest_day_low`, print the lowest open interest the nearest Nifty future reached today.
+#' * For `open_interest_day_low`, print today's open interest range of the nearest Reliance future.
+#' * For `contract_value`, print what one lot of the nearest Nifty future is worth.
+#' * For `contract_value`, compare the exposure of one lot of the nearest Nifty and Reliance futures.
+#'
+#' @examples
+#' \dontrun{
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' cat(format(nifty_future), nifty_future$days_to_expiry, "\n")
+#'
+#' expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' for (expiry_date in as.list(expiries)) {
+#'   future <- EquityFutures$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "RELIANCE",
+#'     expiry_date = expiry_date
+#'   )
+#'   cat(format(expiry_date), future$days_to_expiry, "\n")
+#' }
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' cat(format(nifty_future), "expired:", nifty_future$expired, "\n")
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   include_expired = TRUE
+#' )
+#' oldest_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#' cat(format(oldest_future), "expired:", oldest_future$expired, "\n")
+#' cat("Days since expiry:", -oldest_future$days_to_expiry, "\n")
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' for (expiry_date in as.list(head(expiries, 4))) {
+#'   chain <- EquityIndexOption$chain(
+#'     exchange = "nse",
+#'     underlying_symbol = "NIFTY",
+#'     expiry_date = expiry_date
+#'   )
+#'   first_row <- chain[1, ]
+#'   option <- IndexOption$new(
+#'     instrument_id = first_row[["instrument_id"]]
+#'   )
+#'   cat(format(expiry_date), option$expiry_kind, "\n")
+#' }
+#'
+#' expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' reliance_future <- EquityFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' cat(format(reliance_future), reliance_future$expiry_kind, "\n")
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' cat(
+#'   format(nifty_future$expiry_date),
+#'   "rolls to",
+#'   format(nifty_future$next_expiry),
+#'   "\n"
+#' )
+#'
+#' expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' reliance_future <- EquityFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' next_expiry <- reliance_future$next_expiry
+#' if (is.null(next_expiry)) {
+#'   cat("There is no later expiry listed.", "\n")
+#' } else {
+#'   next_future <- EquityFutures$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "RELIANCE",
+#'     expiry_date = next_expiry
+#'   )
+#'   near_price <- reliance_future$last_price
+#'   far_price <- next_future$last_price
+#'   cat(sprintf("Near %s, next %s", near_price, far_price), "\n")
+#'   cat(
+#'     sprintf("Rolling costs %.2f per share", far_price - near_price),
+#'     "\n"
+#'   )
+#' }
+#'
+#' expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' reliance_future <- EquityFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' underlying <- reliance_future$underlying
+#' cat(format(underlying), underlying$last_price, "\n")
+#'
+#' reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+#' expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' reliance_future <- EquityFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]],
+#'   underlying = reliance
+#' )
+#' print(identical(reliance_future$underlying, reliance))
+#' print(class(reliance_future$underlying)[[1]])
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' index <- nifty_future$underlying
+#' cat(class(index)[[1]], index$symbol, index$last_price, "\n")
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' cat("Index:", nifty_future$underlying_price, "\n")
+#' cat("Future:", nifty_future$last_price, "\n")
+#'
+#' expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' reliance_future <- EquityFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' share_price <- reliance_future$underlying_price
+#' if (is.null(share_price)) {
+#'   cat("UBI has no price for the share.", "\n")
+#' } else {
+#'   cat(sprintf("Reliance shares at %s", share_price), "\n")
+#' }
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' print(nifty_future$open_interest_day_high)
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' day_high <- nifty_future$open_interest_day_high
+#' now <- nifty_future$open_interest
+#' if (is.null(day_high) || is.null(now)) {
+#'   cat("The broker does not report the open interest range.", "\n")
+#' } else {
+#'   cat(
+#'     sprintf("Open interest is %s below today's high", day_high - now),
+#'     "\n"
+#'   )
+#' }
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' print(nifty_future$open_interest_day_low)
+#'
+#' expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' reliance_future <- EquityFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' day_low <- reliance_future$open_interest_day_low
+#' day_high <- reliance_future$open_interest_day_high
+#' cat(
+#'   sprintf("Open interest ranged from %s to %s", day_low, day_high),
+#'   "\n"
+#' )
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' cat(
+#'   nifty_future$lot_size,
+#'   "units worth Rs",
+#'   nifty_future$contract_value,
+#'   "\n"
+#' )
+#'
+#' nifty_expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = nifty_expiries[[1]]
+#' )
+#' reliance_expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' reliance_future <- EquityFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = reliance_expiries[[1]]
+#' )
+#' for (future in list(
+#'   nifty_future,
+#'   reliance_future
+#' )) {
+#'   cat(
+#'     sprintf(
+#'       "%s: Rs %s",
+#'       future$underlying_symbol,
+#'       formatC(future$contract_value, format = "f", digits = 0, big.mark = ",")
+#'     ),
+#'     "\n"
+#'   )
+#' }
+#' }
 #' @export
 Derivative <- R6::R6Class(
   "Derivative",
@@ -3619,6 +14435,187 @@ Derivative <- R6::R6Class(
 #' @description
 #' It holds the members every futures contract shares, such as its basis over the underlying. The family classes such as `EquityFutures` inherit it, and each carries the discovery functions `expiries()` and `contracts()` on its class generator, reading its own segment. Built directly, `Futures` accepts any futures contract, including one on an index.
 #'
+#' The examples below show its properties and the functions on its class generator, in this order:
+#'
+#' * For `Futures$expiries()`, list the live expiries of Nifty futures.
+#' * For `Futures$expiries()`, count how many Reliance futures expiries UBI remembers, including those that have passed.
+#' * For `Futures$expiries()`, show that the base class names no segment, so the family class is the one to call.
+#' * For `Futures$contracts()`, list the live Reliance futures with their instrument ids.
+#' * For `Futures$contracts()`, count the stock futures listed for the nearest expiry, which is the size of the futures universe.
+#' * For `Futures$contracts()`, build a contract object from one row, using its instrument id.
+#' * For `basis`, print the basis of the nearest Nifty future over the index.
+#' * For `basis`, print the basis of every live Reliance future, which normally grows with the time to expiry.
+#' * For `basis_percent`, print the basis of the nearest Nifty future as a percentage of the index.
+#' * For `basis_percent`, say whether the nearest Reliance future trades at a premium or a discount to the share.
+#' * For `cost_of_carry`, print the annual rate implied by the next month's Nifty future, which has enough days left to mean something.
+#' * For `cost_of_carry`, compare the implied carry of Reliance's futures with a 6.5 per cent risk-free rate.
+#'
+#' @examples
+#' \dontrun{
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' for (expiry_date in as.list(expiries)) {
+#'   print(expiry_date)
+#' }
+#'
+#' all_expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   include_expired = TRUE
+#' )
+#' live_expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' cat(
+#'   sprintf(
+#'     "%s expiries known, %s live",
+#'     length(all_expiries),
+#'     length(live_expiries)
+#'   ),
+#'   "\n"
+#' )
+#'
+#' tryCatch(
+#'   {
+#'     Futures$expiries(
+#'       exchange = "nse",
+#'       underlying_symbol = "NIFTY"
+#'     )
+#'   },
+#'   FuturesError = function(error) {
+#'     cat("Refused:", conditionMessage(error), "\n")
+#'   }
+#' )
+#'
+#' contracts <- EquityFutures$contracts(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' print(contracts[, c(
+#'   "underlying_symbol",
+#'   "expiry_date",
+#'   "instrument_id"
+#' )])
+#'
+#' contracts <- EquityFutures$contracts(exchange = "nse")
+#' nearest_expiry <- min(contracts$expiry_date)
+#' nearest <- contracts[contracts$expiry_date == nearest_expiry, , drop = FALSE]
+#' cat(
+#'   sprintf(
+#'     "%s stock futures expire on %s",
+#'     nrow(nearest),
+#'     nearest_expiry
+#'   ),
+#'   "\n"
+#' )
+#'
+#' contracts <- EquityIndexFutures$contracts(
+#'   exchange = "nse",
+#'   underlying_symbol = "BANKNIFTY"
+#' )
+#' first_row <- contracts[1, ]
+#' future <- IndexFutures$new(instrument_id = first_row[["instrument_id"]])
+#' cat(format(future), future$last_price, "\n")
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' cat(sprintf("Basis: %.2f points", nifty_future$basis), "\n")
+#'
+#' reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+#' expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' for (expiry_date in as.list(expiries)) {
+#'   future <- EquityFutures$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "RELIANCE",
+#'     expiry_date = expiry_date,
+#'     underlying = reliance
+#'   )
+#'   cat(format(expiry_date), future$days_to_expiry, future$basis, "\n")
+#' }
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' cat(sprintf("%.3f%%", nifty_future$basis_percent), "\n")
+#'
+#' expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' reliance_future <- EquityFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]]
+#' )
+#'
+#' basis_percent <- reliance_future$basis_percent
+#' if (is.null(basis_percent)) {
+#'   cat("A last price is missing.", "\n")
+#' } else if (basis_percent >= 0) {
+#'   cat(sprintf("Premium of %.3f%%", basis_percent), "\n")
+#' } else {
+#'   cat(sprintf("Discount of %.3f%%", -basis_percent), "\n")
+#' }
+#'
+#' expiries <- EquityIndexFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' nifty_future <- EquityIndexFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[2]]
+#' )
+#' cat(nifty_future$days_to_expiry, "days left", "\n")
+#' cat(
+#'   sprintf("Cost of carry: %.2f%% a year", nifty_future$cost_of_carry),
+#'   "\n"
+#' )
+#'
+#' risk_free_percent <- 6.5
+#' reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+#' expiries <- EquityFutures$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' for (expiry_date in as.list(expiries)) {
+#'   future <- EquityFutures$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "RELIANCE",
+#'     expiry_date = expiry_date,
+#'     underlying = reliance
+#'   )
+#'   carry <- future$cost_of_carry
+#'   if (is.null(carry)) {
+#'     cat(format(expiry_date), "expires today or a price is missing", "\n")
+#'   } else if (carry > risk_free_percent) {
+#'     cat(format(expiry_date), sprintf("%.2f%%: rich", carry), "\n")
+#'   } else {
+#'     cat(format(expiry_date), sprintf("%.2f%%: cheap", carry), "\n")
+#'   }
+#' }
+#' }
 #' @export
 Futures <- R6::R6Class(
   "Futures",
@@ -3754,6 +14751,728 @@ Futures$contracts <- function(
 #'
 #' The pricing methods treat the option as European and without dividends, and take it to expire at 15:30 India time on its expiry date, which is what UBI's own order engine assumes. MCX commodity options trade until later in the evening, so for them 15:30 is an approximation.
 #'
+#' The examples below show its properties and the functions on its class generator, in this order:
+#'
+#' * For `Option$expiries()`, list the next five Nifty option expiries.
+#' * For `Option$expiries()`, compare how many option expiries are listed on an index and on a share.
+#' * For `Option$strikes()`, print the lowest and highest strikes and how many there are for the nearest Reliance option expiry.
+#' * For `Option$strikes()`, find the at-the-money strike, the listed strike nearest the Nifty level.
+#' * For `Option$chain()`, print the first rows of the nearest Nifty option chain.
+#' * For `Option$chain()`, count the calls and the puts in a Reliance option chain.
+#' * For `Option$chain()`, build the three calls nearest the money from the chain's instrument ids and print their prices.
+#' * For `is_call`, check the kind of an at-the-money Nifty option.
+#' * For `is_call`, split a list of options into calls and puts.
+#' * For `is_put`, check that a contract built with the `PE` option type is a put.
+#' * For `is_put`, show that a call is not a put.
+#' * For `intrinsic_value`, print the intrinsic value of the at-the-money call and put.
+#' * For `intrinsic_value`, compare the intrinsic value of a deep in-the-money Reliance call with its premium.
+#' * For `time_value`, print how much of the at-the-money Nifty call's premium is time value.
+#' * For `time_value`, compare the time value of the call and the put at the same strike.
+#' * For `in_the_money`, say whether the at-the-money call and put are in the money right now.
+#' * For `in_the_money`, count the in-the-money calls among five strikes around the money.
+#' * For `moneyness_percent`, print how far the at-the-money call and put are from the money.
+#' * For `moneyness_percent`, print the moneyness of the lowest and highest Reliance call strikes, one deep in and one far out of the money.
+#' * For `breakeven_price`, print the level the Nifty must reach by expiry for a buyer of the at-the-money call to break even.
+#' * For `breakeven_price`, print the move needed to break even for the call and the put, as a percentage of the index.
+#' * For `premium_per_lot`, print what one lot of the at-the-money Nifty call costs.
+#' * For `premium_per_lot`, work out how many lots of the call and the put a budget of Rs 50,000 buys.
+#' * For `notional_value`, print the value of the index one lot of the at-the-money call controls.
+#' * For `notional_value`, compare the premium with the notional value, which is the leverage an option gives.
+#'
+#' @examples
+#' \dontrun{
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' for (expiry_date in as.list(head(expiries, 5))) {
+#'   print(expiry_date)
+#' }
+#'
+#' index_expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' share_expiries <- EquityOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' cat("NIFTY:", length(index_expiries), "\n")
+#' cat("RELIANCE:", length(share_expiries), "\n")
+#'
+#' expiries <- EquityOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' strikes <- EquityOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]]
+#' )
+#' cat(
+#'   length(strikes),
+#'   "strikes from",
+#'   strikes[[1]],
+#'   "to",
+#'   strikes[[length(strikes)]],
+#'   "\n"
+#' )
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' cat(
+#'   sprintf("Nifty at %s, at-the-money strike %s", level, nearest_strike),
+#'   "\n"
+#' )
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' chain <- EquityIndexOption$chain(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[1]]
+#' )
+#' cat(nrow(chain), "contracts", "\n")
+#' print(head(
+#'   chain[, c(
+#'     "strike_price",
+#'     "option_type",
+#'     "instrument_id"
+#'   )]
+#' ))
+#'
+#' expiries <- EquityOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' chain <- EquityOption$chain(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]]
+#' )
+#' print(sort(table(chain$option_type), decreasing = TRUE))
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' chain <- EquityIndexOption$chain(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[2]]
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' calls <- chain[chain$option_type == "CE", , drop = FALSE]
+#' calls$distance <- abs(calls$strike_price - level)
+#' nearest_calls <- head(calls[order(calls$distance), , drop = FALSE], 3)
+#' for (instrument_id in nearest_calls$instrument_id) {
+#'   option <- IndexOption$new(instrument_id = instrument_id)
+#'   cat(option$strike_price, option$last_price, "\n")
+#' }
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' call <- EquityIndexOption$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date,
+#'   strike_price = nearest_strike,
+#'   option_type = "CE"
+#' )
+#'
+#' cat(format(call), "is a call:", call$is_call, "\n")
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' options <- list()
+#' for (option_type in c(
+#'   "CE",
+#'   "PE"
+#' )) {
+#'   option <- EquityIndexOption$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "NIFTY",
+#'     expiry_date = expiry_date,
+#'     strike_price = nearest_strike,
+#'     option_type = option_type
+#'   )
+#'   options[[length(options) + 1]] <- option
+#' }
+#'
+#' for (option in options) {
+#'   if (option$is_call) {
+#'     cat("Call:", format(option), "\n")
+#'   } else {
+#'     cat("Put:", format(option), "\n")
+#'   }
+#' }
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' options <- list()
+#' for (option_type in c(
+#'   "CE",
+#'   "PE"
+#' )) {
+#'   option <- EquityIndexOption$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "NIFTY",
+#'     expiry_date = expiry_date,
+#'     strike_price = nearest_strike,
+#'     option_type = option_type
+#'   )
+#'   options[[length(options) + 1]] <- option
+#' }
+#'
+#' put <- options[[2]]
+#' cat(format(put), "is a put:", put$is_put, "\n")
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' call <- EquityIndexOption$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date,
+#'   strike_price = nearest_strike,
+#'   option_type = "CE"
+#' )
+#'
+#' print(call$is_put)
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' options <- list()
+#' for (option_type in c(
+#'   "CE",
+#'   "PE"
+#' )) {
+#'   option <- EquityIndexOption$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "NIFTY",
+#'     expiry_date = expiry_date,
+#'     strike_price = nearest_strike,
+#'     option_type = option_type
+#'   )
+#'   options[[length(options) + 1]] <- option
+#' }
+#'
+#' for (option in options) {
+#'   cat(option$option_type, option$intrinsic_value, "\n")
+#' }
+#'
+#' expiries <- EquityOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' strikes <- EquityOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]]
+#' )
+#' call <- EquityOption$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]],
+#'   strike_price = strikes[[1]],
+#'   option_type = "CE"
+#' )
+#' cat("Strike:", call$strike_price, "\n")
+#' cat("Intrinsic value:", call$intrinsic_value, "\n")
+#' cat("Premium:", call$last_price, "\n")
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' call <- EquityIndexOption$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date,
+#'   strike_price = nearest_strike,
+#'   option_type = "CE"
+#' )
+#'
+#' cat("Premium:", call$last_price, "\n")
+#' cat("Time value:", call$time_value, "\n")
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' options <- list()
+#' for (option_type in c(
+#'   "CE",
+#'   "PE"
+#' )) {
+#'   option <- EquityIndexOption$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "NIFTY",
+#'     expiry_date = expiry_date,
+#'     strike_price = nearest_strike,
+#'     option_type = option_type
+#'   )
+#'   options[[length(options) + 1]] <- option
+#' }
+#'
+#' for (option in options) {
+#'   cat(option$option_type, option$time_value, "\n")
+#' }
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' options <- list()
+#' for (option_type in c(
+#'   "CE",
+#'   "PE"
+#' )) {
+#'   option <- EquityIndexOption$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "NIFTY",
+#'     expiry_date = expiry_date,
+#'     strike_price = nearest_strike,
+#'     option_type = option_type
+#'   )
+#'   options[[length(options) + 1]] <- option
+#' }
+#'
+#' for (option in options) {
+#'   cat(
+#'     option$option_type,
+#'     option$strike_price,
+#'     option$in_the_money,
+#'     "\n"
+#'   )
+#' }
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiries[[2]]
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_index <- 1
+#' for (index in seq_along(strikes)) {
+#'   if (abs(strikes[[index]] - level) < abs(strikes[[nearest_index]] - level)) {
+#'     nearest_index <- index
+#'   }
+#' }
+#' in_the_money_count <- 0
+#' first_index <- max(1, nearest_index - 2)
+#' last_index <- min(length(strikes), nearest_index + 2)
+#' for (strike in strikes[first_index:last_index]) {
+#'   call <- EquityIndexOption$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "NIFTY",
+#'     expiry_date = expiries[[2]],
+#'     strike_price = strike,
+#'     option_type = "CE"
+#'   )
+#'   if (call$in_the_money) {
+#'     in_the_money_count <- in_the_money_count + 1
+#'   }
+#' }
+#' cat(sprintf("%s of 5 calls are in the money", in_the_money_count), "\n")
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' options <- list()
+#' for (option_type in c(
+#'   "CE",
+#'   "PE"
+#' )) {
+#'   option <- EquityIndexOption$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "NIFTY",
+#'     expiry_date = expiry_date,
+#'     strike_price = nearest_strike,
+#'     option_type = option_type
+#'   )
+#'   options[[length(options) + 1]] <- option
+#' }
+#'
+#' for (option in options) {
+#'   cat(
+#'     option$option_type,
+#'     sprintf("%.3f%%", option$moneyness_percent),
+#'     "\n"
+#'   )
+#' }
+#'
+#' expiries <- EquityOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE"
+#' )
+#' strikes <- EquityOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "RELIANCE",
+#'   expiry_date = expiries[[1]]
+#' )
+#' for (strike in list(
+#'   strikes[[1]],
+#'   strikes[[length(strikes)]]
+#' )) {
+#'   call <- EquityOption$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "RELIANCE",
+#'     expiry_date = expiries[[1]],
+#'     strike_price = strike,
+#'     option_type = "CE"
+#'   )
+#'   cat(strike, sprintf("%.2f%%", call$moneyness_percent), "\n")
+#' }
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' call <- EquityIndexOption$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date,
+#'   strike_price = nearest_strike,
+#'   option_type = "CE"
+#' )
+#'
+#' cat(
+#'   call$strike_price,
+#'   "+",
+#'   call$last_price,
+#'   "=",
+#'   call$breakeven_price,
+#'   "\n"
+#' )
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' options <- list()
+#' for (option_type in c(
+#'   "CE",
+#'   "PE"
+#' )) {
+#'   option <- EquityIndexOption$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "NIFTY",
+#'     expiry_date = expiry_date,
+#'     strike_price = nearest_strike,
+#'     option_type = option_type
+#'   )
+#'   options[[length(options) + 1]] <- option
+#' }
+#'
+#' for (option in options) {
+#'   breakeven <- option$breakeven_price
+#'   move <- (breakeven - level) / level * 100
+#'   cat(option$option_type, breakeven, sprintf("%+.2f%%", move), "\n")
+#' }
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' call <- EquityIndexOption$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date,
+#'   strike_price = nearest_strike,
+#'   option_type = "CE"
+#' )
+#'
+#' cat(call$lot_size, "units cost Rs", call$premium_per_lot, "\n")
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' options <- list()
+#' for (option_type in c(
+#'   "CE",
+#'   "PE"
+#' )) {
+#'   option <- EquityIndexOption$new(
+#'     exchange = "nse",
+#'     underlying_symbol = "NIFTY",
+#'     expiry_date = expiry_date,
+#'     strike_price = nearest_strike,
+#'     option_type = option_type
+#'   )
+#'   options[[length(options) + 1]] <- option
+#' }
+#'
+#' budget <- 50000
+#' for (option in options) {
+#'   premium <- option$premium_per_lot
+#'   cat(option$option_type, as.integer(budget %/% premium), "lots", "\n")
+#' }
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' call <- EquityIndexOption$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date,
+#'   strike_price = nearest_strike,
+#'   option_type = "CE"
+#' )
+#'
+#' cat(
+#'   sprintf(
+#'     "Rs %s",
+#'     formatC(call$notional_value, format = "f", digits = 0, big.mark = ",")
+#'   ),
+#'   "\n"
+#' )
+#'
+#' expiries <- EquityIndexOption$expiries(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY"
+#' )
+#' expiry_date <- expiries[[2]]
+#' strikes <- EquityIndexOption$strikes(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date
+#' )
+#' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+#' nearest_strike <- strikes[[1]]
+#' for (strike in strikes) {
+#'   if (abs(strike - level) < abs(nearest_strike - level)) {
+#'     nearest_strike <- strike
+#'   }
+#' }
+#' call <- EquityIndexOption$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "NIFTY",
+#'   expiry_date = expiry_date,
+#'   strike_price = nearest_strike,
+#'   option_type = "CE"
+#' )
+#'
+#' leverage <- call$notional_value / call$premium_per_lot
+#' cat(
+#'   sprintf("One rupee of premium controls Rs %.1f of index", leverage),
+#'   "\n"
+#' )
+#' }
 #' @export
 Option <- R6::R6Class(
   "Option",
@@ -3823,10 +15542,115 @@ Option <- R6::R6Class(
     #' Finds the volatility at which the pricing model reproduces the option's last price.
     #'
     #' The model is Black-76 when the option is priced off a future, which is the default for an option on a commodity, a currency pair or a bond and the case whenever the given underlying is a future, and Black-Scholes otherwise. The underlying's price is read from UBI unless one is given, and a figure given is taken as the same kind of price, spot or forward, as the underlying it stands in for. The option still needs a last price of its own, which some contracts lack.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Print the implied volatility of the at-the-money Nifty call.
+    #' * Compare the call's and the put's implied volatility at the same strike with a 6 per cent rate.
+    #' * Ask what the implied volatility would be if the index were one per cent higher at today's premium.
     #' @param risk_free_rate The numeric annual risk-free interest rate, continuously compounded, such as 0.065 for 6.5 per cent.
     #' @param underlying_price The numeric price of the underlying to use, or `NULL` to read the underlying's last price from UBI.
     #' @return The numeric annual volatility, such as 0.12 for 12 per cent, or `NULL` when either price is unknown, when the option is at or past 15:30 India time on its expiry date, or when the premium is below the option's discounted intrinsic value.
     #' @details Errors: signals `ValueError` when `underlying_price` is given and is not above zero; `UnderlyingError` when no underlying price is given and the option's underlying cannot be found; `ServiceUnavailableError` when UBI has no recent quote for the option, or for the underlying when no price is given; and another `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' expiries <- EquityIndexOption$expiries(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY"
+    #' )
+    #' expiry_date <- expiries[[2]]
+    #' strikes <- EquityIndexOption$strikes(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY",
+    #'   expiry_date = expiry_date
+    #' )
+    #' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+    #' nearest_strike <- strikes[[1]]
+    #' for (strike in strikes) {
+    #'   if (abs(strike - level) < abs(nearest_strike - level)) {
+    #'     nearest_strike <- strike
+    #'   }
+    #' }
+    #' call <- EquityIndexOption$new(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY",
+    #'   expiry_date = expiry_date,
+    #'   strike_price = nearest_strike,
+    #'   option_type = "CE"
+    #' )
+    #'
+    #' volatility <- call$implied_volatility()
+    #' if (is.null(volatility)) {
+    #'   cat("No implied volatility could be found.", "\n")
+    #' } else {
+    #'   cat(sprintf("%.2f%% a year", volatility * 100), "\n")
+    #' }
+    #'
+    #' expiries <- EquityIndexOption$expiries(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY"
+    #' )
+    #' expiry_date <- expiries[[2]]
+    #' strikes <- EquityIndexOption$strikes(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY",
+    #'   expiry_date = expiry_date
+    #' )
+    #' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+    #' nearest_strike <- strikes[[1]]
+    #' for (strike in strikes) {
+    #'   if (abs(strike - level) < abs(nearest_strike - level)) {
+    #'     nearest_strike <- strike
+    #'   }
+    #' }
+    #' options <- list()
+    #' for (option_type in c(
+    #'   "CE",
+    #'   "PE"
+    #' )) {
+    #'   option <- EquityIndexOption$new(
+    #'     exchange = "nse",
+    #'     underlying_symbol = "NIFTY",
+    #'     expiry_date = expiry_date,
+    #'     strike_price = nearest_strike,
+    #'     option_type = option_type
+    #'   )
+    #'   options[[length(options) + 1]] <- option
+    #' }
+    #'
+    #' for (option in options) {
+    #'   volatility <- option$implied_volatility(risk_free_rate = 0.06)
+    #'   cat(option$option_type, volatility, "\n")
+    #' }
+    #'
+    #' expiries <- EquityIndexOption$expiries(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY"
+    #' )
+    #' expiry_date <- expiries[[2]]
+    #' strikes <- EquityIndexOption$strikes(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY",
+    #'   expiry_date = expiry_date
+    #' )
+    #' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+    #' nearest_strike <- strikes[[1]]
+    #' for (strike in strikes) {
+    #'   if (abs(strike - level) < abs(nearest_strike - level)) {
+    #'     nearest_strike <- strike
+    #'   }
+    #' }
+    #' call <- EquityIndexOption$new(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY",
+    #'   expiry_date = expiry_date,
+    #'   strike_price = nearest_strike,
+    #'   option_type = "CE"
+    #' )
+    #'
+    #' volatility <- call$implied_volatility(underlying_price = level * 1.01)
+    #' cat("At an index 1% higher:", volatility, "\n")
+    #' }
     implied_volatility = function(
       risk_free_rate = OPTION_PRICING_DEFAULT_RISK_FREE_RATE,
       underlying_price = NULL
@@ -3868,11 +15692,124 @@ Option <- R6::R6Class(
     #' Works out the option's fair price and greeks with the pricing model that fits its underlying.
     #'
     #' The model is Black-76 when the option is priced off a future and Black-Scholes otherwise, as `implied_volatility()` explains, and the answer names it. Under Black-76 delta and gamma are measured against the future's price, and rho holds that price still, so it only discounts. Without a volatility, the option's implied volatility is used, so the fair price equals the last price and the greeks describe the option as the market prices it. Theta is per calendar day, and vega and rho are per percentage point, which is how brokers' option chains show them.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Print the greeks of the at-the-money Nifty call at its implied volatility.
+    #' * Work out the fair value of the call at a volatility of 15 per cent and compare it with its premium.
+    #' * Add up the delta of a straddle, one call and one put at the same strike, which is close to zero at the money.
     #' @param risk_free_rate The numeric annual risk-free interest rate, continuously compounded, such as 0.065 for 6.5 per cent.
     #' @param volatility The numeric annual volatility to use, such as 0.12 for 12 per cent, or `NULL` to use the option's implied volatility.
     #' @param underlying_price The numeric price of the underlying to use, or `NULL` to read the underlying's last price from UBI.
     #' @return A named list with `model`, the character `"black_76"` or `"black_scholes"`, and `volatility`, `price`, `delta`, `gamma`, `theta`, `vega` and `rho`, each numeric, or `NULL` when the prices needed are unknown, when the option is at or past 15:30 India time on its expiry date, or when no implied volatility can be found.
     #' @details Errors: signals `ValueError` when `underlying_price` or `volatility` is given and is not above zero; `UnderlyingError` when no underlying price is given and the option's underlying cannot be found; `ServiceUnavailableError` when UBI has no recent quote for the option, or for the underlying when no price is given; and another `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' expiries <- EquityIndexOption$expiries(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY"
+    #' )
+    #' expiry_date <- expiries[[2]]
+    #' strikes <- EquityIndexOption$strikes(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY",
+    #'   expiry_date = expiry_date
+    #' )
+    #' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+    #' nearest_strike <- strikes[[1]]
+    #' for (strike in strikes) {
+    #'   if (abs(strike - level) < abs(nearest_strike - level)) {
+    #'     nearest_strike <- strike
+    #'   }
+    #' }
+    #' call <- EquityIndexOption$new(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY",
+    #'   expiry_date = expiry_date,
+    #'   strike_price = nearest_strike,
+    #'   option_type = "CE"
+    #' )
+    #'
+    #' greeks <- call$greeks()
+    #' if (is.null(greeks)) {
+    #'   cat("The greeks could not be worked out.", "\n")
+    #' } else {
+    #'   for (name in names(greeks)) {
+    #'     value <- greeks[[name]]
+    #'     cat(name, value, "\n")
+    #'   }
+    #' }
+    #'
+    #' expiries <- EquityIndexOption$expiries(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY"
+    #' )
+    #' expiry_date <- expiries[[2]]
+    #' strikes <- EquityIndexOption$strikes(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY",
+    #'   expiry_date = expiry_date
+    #' )
+    #' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+    #' nearest_strike <- strikes[[1]]
+    #' for (strike in strikes) {
+    #'   if (abs(strike - level) < abs(nearest_strike - level)) {
+    #'     nearest_strike <- strike
+    #'   }
+    #' }
+    #' call <- EquityIndexOption$new(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY",
+    #'   expiry_date = expiry_date,
+    #'   strike_price = nearest_strike,
+    #'   option_type = "CE"
+    #' )
+    #'
+    #' greeks <- call$greeks(volatility = 0.15)
+    #' cat("Model:", greeks[["model"]], "\n")
+    #' cat("Fair value:", round(greeks[["price"]], 2), "\n")
+    #' cat("Premium:", call$last_price, "\n")
+    #'
+    #' expiries <- EquityIndexOption$expiries(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY"
+    #' )
+    #' expiry_date <- expiries[[2]]
+    #' strikes <- EquityIndexOption$strikes(
+    #'   exchange = "nse",
+    #'   underlying_symbol = "NIFTY",
+    #'   expiry_date = expiry_date
+    #' )
+    #' level <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")$last_price
+    #' nearest_strike <- strikes[[1]]
+    #' for (strike in strikes) {
+    #'   if (abs(strike - level) < abs(nearest_strike - level)) {
+    #'     nearest_strike <- strike
+    #'   }
+    #' }
+    #' options <- list()
+    #' for (option_type in c(
+    #'   "CE",
+    #'   "PE"
+    #' )) {
+    #'   option <- EquityIndexOption$new(
+    #'     exchange = "nse",
+    #'     underlying_symbol = "NIFTY",
+    #'     expiry_date = expiry_date,
+    #'     strike_price = nearest_strike,
+    #'     option_type = option_type
+    #'   )
+    #'   options[[length(options) + 1]] <- option
+    #' }
+    #'
+    #' total_delta <- 0.0
+    #' for (option in options) {
+    #'   greeks <- option$greeks()
+    #'   cat(option$option_type, round(greeks[["delta"]], 3), "\n")
+    #'   total_delta <- total_delta + greeks[["delta"]]
+    #' }
+    #' cat("Straddle delta:", round(total_delta, 3), "\n")
+    #' }
     greeks = function(
       risk_free_rate = OPTION_PRICING_DEFAULT_RISK_FREE_RATE,
       volatility = NULL,

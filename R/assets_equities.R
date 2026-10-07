@@ -19,12 +19,142 @@ EQUITIES_EQUITY_INDEX_OPTIONS_SEGMENT <- "equity_index_options"
 #'
 #' * `Equity$search(exchange, term, limit = 50, unified_broker_interface = NULL)` finds listed shares whose symbol contains `term`, matched without regard to case, with an exact match first, then symbols starting with the term, then symbols containing it, so a partial name such as `"RELI"` finds RELIANCE near the top. It returns a `data.frame` with `instrument_id`, `exchange`, `segment`, `shape`, `symbol` and the derivative fields left empty, or `NULL` when no share matches, and signals `BadRequestError` when the exchange is not one UBI knows.
 #'
+#' The examples below start with a short tour of the class, then show its properties and the functions on its class generator, in this order:
+#'
+#' * For `holdings`, print the holding of Vodafone Idea, or say that none is held.
+#' * For `holdings`, report how many shares of each of a few companies are held and how many are free to sell.
+#' * For `holdings`, compare what was paid for a holding with what it is worth now.
+#' * For `holdings_value`, print what the Vodafone Idea shares held are worth, which is `NULL` when none are held.
+#' * For `holdings_value`, add up the value of the shares held in a few companies, skipping any that are not held.
+#' * For `holdings_pnl`, print the profit and loss of the Vodafone Idea shares held, which is `NULL` when none are held.
+#' * For `holdings_pnl`, print today's change and the unrealised profit of each of a few holdings.
+#' * For `Equity$search()`, find the nse shares whose symbol contains a partial name.
+#' * For `Equity$search()`, search, then build the first match and print its last price.
+#' * For `Equity$search()`, check whether a symbol is listed on both the nse and the bse.
+#'
 #' @examples
 #' \dontrun{
 #' share <- Equity$new(exchange = "nse", symbol = "RELIANCE")
 #' frame <- share$relative_strength_index(window = 14, days = 365)
 #' share$holdings
 #' Equity$search(exchange = "nse", term = "RELI")
+#'
+#' share <- Equity$new(exchange = "nse", symbol = "IDEA")
+#' holding <- share$holdings
+#' if (is.null(holding)) {
+#'   cat("No IDEA shares are held.", "\n")
+#' } else {
+#'   cat(
+#'     holding[["quantity"]],
+#'     "shares at",
+#'     holding[["average_price"]],
+#'     "\n"
+#'   )
+#' }
+#'
+#' symbols <- c(
+#'   "IDEA",
+#'   "ITC",
+#'   "RELIANCE"
+#' )
+#' for (symbol in symbols) {
+#'   share <- Equity$new(exchange = "nse", symbol = symbol)
+#'   holding <- share$holdings
+#'   if (is.null(holding)) {
+#'     cat(sprintf("%s: not held", symbol), "\n")
+#'     next
+#'   }
+#'   pledged <- holding[["collateral_quantity"]]
+#'   free_quantity <- holding[["quantity"]] - pledged
+#'   cat(
+#'     sprintf(
+#'       "%s: %s held, %s free",
+#'       symbol,
+#'       holding[["quantity"]],
+#'       free_quantity
+#'     ),
+#'     "\n"
+#'   )
+#' }
+#'
+#' share <- Equity$new(exchange = "nse", symbol = "ITC")
+#' holding <- share$holdings
+#' if (is.null(holding)) {
+#'   cat("No ITC shares are held.", "\n")
+#' } else {
+#'   invested <- holding[["invested_value"]]
+#'   current <- holding[["current_value"]]
+#'   cat(sprintf("Invested %.2f, worth %.2f now", invested, current), "\n")
+#' }
+#'
+#' share <- Equity$new(exchange = "nse", symbol = "IDEA")
+#' print(share$holdings_value)
+#'
+#' symbols <- c(
+#'   "IDEA",
+#'   "ITC",
+#'   "TCS"
+#' )
+#' total_value <- 0.0
+#' for (symbol in symbols) {
+#'   share <- Equity$new(exchange = "nse", symbol = symbol)
+#'   value <- share$holdings_value
+#'   if (!is.null(value)) {
+#'     total_value <- total_value + value
+#'   }
+#' }
+#' cat(sprintf("Held in these shares: %.2f rupees", total_value), "\n")
+#'
+#' share <- Equity$new(exchange = "nse", symbol = "IDEA")
+#' print(share$holdings_pnl)
+#'
+#' symbols <- c(
+#'   "IDEA",
+#'   "ITC"
+#' )
+#' for (symbol in symbols) {
+#'   share <- Equity$new(exchange = "nse", symbol = symbol)
+#'   profit_and_loss <- share$holdings_pnl
+#'   if (is.null(profit_and_loss)) {
+#'     cat(sprintf("%s: not held", symbol), "\n")
+#'     next
+#'   }
+#'   day_change <- profit_and_loss[["day_change"]]
+#'   unrealized <- profit_and_loss[["unrealized"]]
+#'   cat(
+#'     sprintf("%s: today %s, unrealised %s", symbol, day_change, unrealized),
+#'     "\n"
+#'   )
+#' }
+#'
+#' matches <- Equity$search(exchange = "nse", term = "RELI")
+#' print(matches[, c(
+#'   "symbol",
+#'   "instrument_id"
+#' )])
+#'
+#' matches <- Equity$search(exchange = "nse", term = "INFY", limit = 5)
+#' if (is.null(matches)) {
+#'   cat("No share matches.", "\n")
+#' } else {
+#'   symbol <- matches$symbol[[1]]
+#'   share <- Equity$new(exchange = "nse", symbol = symbol)
+#'   cat(symbol, share$last_price, "\n")
+#' }
+#'
+#' exchanges <- c(
+#'   "nse",
+#'   "bse"
+#' )
+#' for (exchange in exchanges) {
+#'   matches <- Equity$search(
+#'     exchange = exchange,
+#'     term = "TCS",
+#'     limit = 1
+#'   )
+#'   found <- !is.null(matches) && matches$symbol[[1]] == "TCS"
+#'   cat(sprintf("TCS listed on %s: %s", exchange, found), "\n")
+#' }
 #' }
 #' @export
 Equity <- R6::R6Class(
@@ -71,6 +201,11 @@ Equity <- R6::R6Class(
     #' Buys more of this share to keep.
     #'
     #' The order is always sent as `cnc`, which is the product that puts shares in the demat account. Nothing is read first, because a share can be bought whether or not it is already held, and UBI checks funds no more than a broker's order route does.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Bid for one Vodafone Idea share to keep, three per cent below the last price, and cancel the order the engine holds at once.
+    #' * Send the same bid as an immediate-or-cancel order, which the exchange cancels itself when nothing matches.
     #' @param quantity The integer number of shares to buy.
     #' @param price The numeric limit price in rupees, or `NULL` to send a market order.
     #' @param validity The character validity, `"day"` or `"ioc"`, or `NULL` to let UBI use `"day"`.
@@ -78,6 +213,35 @@ Equity <- R6::R6Class(
     #' @param tag A character label of up to twenty letters and digits for the order, or `NULL`.
     #' @return The named list `place_order()` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' share <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' price <- round(share$last_price * 0.97, 2)
+    #' answer <- share$add_to_holdings(quantity = 1, price = price)
+    #' cat(answer[["outcome"]], answer[["parent_id"]], "\n")
+    #' if (!is.null(answer[["parent_id"]])) {
+    #'   cancelled <- share$cancel_parent(answer[["parent_id"]])
+    #'   print(cancelled[["state"]])
+    #' }
+    #'
+    #' share <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' price <- round(share$last_price * 0.97, 2)
+    #' answer <- share$add_to_holdings(
+    #'   quantity = 1,
+    #'   price = price,
+    #'   validity = "ioc",
+    #'   tag = "examplebid"
+    #' )
+    #' cat(answer[["outcome"]], answer[["status_message"]], "\n")
+    #' if (!is.null(answer[["parent_id"]])) {
+    #'   tryCatch(
+    #'     share$cancel_parent(answer[["parent_id"]]),
+    #'     ConflictError = function(error) {
+    #'       cat("The order had already finished.", "\n")
+    #'     }
+    #'   )
+    #' }
+    #' }
     add_to_holdings = function(
       quantity,
       price = NULL,
@@ -110,6 +274,11 @@ Equity <- R6::R6Class(
     #' Sells some of the shares held, without selling more than are free.
     #'
     #' Shares pledged as collateral cannot be sold until they are released at the broker, so the quantity asked for is measured against the free shares rather than the whole holding.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Offer one Vodafone Idea share from the holding three per cent above the last price, and cancel the order at once.
+    #' * Catch the error raised when more shares are asked for than are free to sell, which sends no order.
     #' @param quantity The integer number of shares to sell.
     #' @param price The numeric limit price in rupees, or `NULL` to send a market order.
     #' @param validity The character validity, `"day"` or `"ioc"`, or `NULL` to let UBI use `"day"`.
@@ -117,6 +286,28 @@ Equity <- R6::R6Class(
     #' @param tag A character label of up to twenty letters and digits for the order, or `NULL`.
     #' @return The named list `place_order()` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `HoldingError` when this share is not held, or the quantity is more than the free shares; and a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' share <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' if (is.null(share$holdings)) {
+    #'   cat("No IDEA shares are held, so there is nothing to offer.", "\n")
+    #' } else {
+    #'   price <- round(share$last_price * 1.03, 2)
+    #'   answer <- share$reduce_holdings(quantity = 1, price = price)
+    #'   cat(answer[["outcome"]], answer[["parent_id"]], "\n")
+    #'   if (!is.null(answer[["parent_id"]])) {
+    #'     share$cancel_parent(answer[["parent_id"]])
+    #'   }
+    #' }
+    #'
+    #' share <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' tryCatch(
+    #'   share$reduce_holdings(quantity = 10000000, price = 100.0),
+    #'   HoldingError = function(error) {
+    #'     cat(sprintf("Refused: %s", conditionMessage(error)), "\n")
+    #'   }
+    #' )
+    #' }
     reduce_holdings = function(
       quantity,
       price = NULL,
@@ -152,12 +343,39 @@ Equity <- R6::R6Class(
     #' Sells every share held that is free to sell.
     #'
     #' Shares pledged as collateral are left alone, because they cannot be sold until they are released at the broker, so this empties the holding only when nothing is pledged.
+    #'
+    #' The examples below, in order:
+    #'
+    #' * Offer every free Vodafone Idea share three per cent above the last price, and cancel the order at once.
+    #' * Catch the error raised for a share that is not held, which sends no order.
     #' @param price The numeric limit price in rupees, or `NULL` to send a market order.
     #' @param validity The character validity, `"day"` or `"ioc"`, or `NULL` to let UBI use `"day"`.
     #' @param after_market A logical that is `TRUE` to send the order as an after-market order.
     #' @param tag A character label of up to twenty letters and digits for the order, or `NULL`.
     #' @return The named list `place_order()` returns, holding `broker`, `order_id`, `outcome` and the rest.
     #' @details Errors: signals `HoldingError` when this share is not held, or every share held is pledged as collateral; and a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
+    #' @examples
+    #' \dontrun{
+    #' share <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' if (is.null(share$holdings)) {
+    #'   cat("No IDEA shares are held, so there is nothing to sell.", "\n")
+    #' } else {
+    #'   price <- round(share$last_price * 1.03, 2)
+    #'   answer <- share$liquidate_holdings(price = price)
+    #'   cat(answer[["outcome"]], answer[["parent_id"]], "\n")
+    #'   if (!is.null(answer[["parent_id"]])) {
+    #'     share$cancel_parent(answer[["parent_id"]])
+    #'   }
+    #' }
+    #'
+    #' share <- Equity$new(exchange = "nse", symbol = "IDEA")
+    #' tryCatch(
+    #'   share$liquidate_holdings(price = 100.0),
+    #'   HoldingError = function(error) {
+    #'     cat(sprintf("Nothing sold: %s", conditionMessage(error)), "\n")
+    #'   }
+    #' )
+    #' }
     liquidate_holdings = function(
       price = NULL,
       validity = NULL,
@@ -568,11 +786,41 @@ EquityOption$chain <- function(
 #'
 #' * `EquityIndex$search(exchange, term, limit = 50, unified_broker_interface = NULL)` finds equity indices whose symbol contains `term`, with an exact match first, then symbols starting with the term, then symbols containing it, so a partial name such as `"BANK"` finds BANKNIFTY near the top. It returns a `data.frame` of identities, or `NULL` when no index matches, and signals `BadRequestError` when the exchange is not one UBI knows.
 #'
+#' The examples below start with a short tour of the class, then show the functions on its class generator, in this order:
+#'
+#' * For `EquityIndex$search()`, find the nse indices whose symbol contains `BANK`.
+#' * For `EquityIndex$search()`, print the level of each index whose symbol contains `NIFTY IT`.
+#' * For `EquityIndex$search()`, count how many indices the bse publishes with `SENSEX` in the symbol.
+#'
 #' @examples
 #' \dontrun{
 #' nifty <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")
 #' nifty$last_price
 #' EquityIndex$search(exchange = "nse", term = "BANK")
+#'
+#' matches <- EquityIndex$search(exchange = "nse", term = "BANK")
+#' print(matches$symbol)
+#'
+#' matches <- EquityIndex$search(exchange = "nse", term = "NIFTY IT")
+#' if (is.null(matches)) {
+#'   cat("No index matches.", "\n")
+#' } else {
+#'   for (symbol in matches$symbol) {
+#'     index <- EquityIndex$new(exchange = "nse", symbol = symbol)
+#'     cat(symbol, index$last_price, "\n")
+#'   }
+#' }
+#'
+#' matches <- EquityIndex$search(
+#'   exchange = "bse",
+#'   term = "SENSEX",
+#'   limit = 200
+#' )
+#' if (is.null(matches)) {
+#'   print(0)
+#' } else {
+#'   print(nrow(matches))
+#' }
 #' }
 #' @export
 EquityIndex <- R6::R6Class(
