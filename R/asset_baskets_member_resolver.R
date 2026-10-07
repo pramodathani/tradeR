@@ -188,10 +188,10 @@ MemberResolver <- R6::R6Class(
     }
   ),
   private = list(
-    #' Picks the fields of a row that name its instrument.
-    #' @param row A named list naming one instrument, possibly with other keys such as `weight`.
-    #' @return A named list holding only `instrument_id` when the row has one, and otherwise every identity field the row gives a value for.
-    #' @details Errors: signals `BasketMemberError` when the row has neither an `instrument_id` nor an `exchange` and a `segment`.
+    # Picks the fields of a row that name its instrument.
+    # @param row A named list naming one instrument, possibly with other keys such as `weight`.
+    # @return A named list holding only `instrument_id` when the row has one, and otherwise every identity field the row gives a value for.
+    # @details Errors: signals `BasketMemberError` when the row has neither an `instrument_id` nor an `exchange` and a `segment`.
     lookup_for = function(row) {
       if (!is.null(row[["instrument_id"]])) {
         return(
@@ -218,9 +218,9 @@ MemberResolver <- R6::R6Class(
       lookup
     },
 
-    #' Builds an instrument object from its details without asking UBI again.
-    #' @param details The named list UBI returned for one instrument from `/api/instruments/details`.
-    #' @return A `NonTradeableInstrument` for an index, or a `TradeableInstrument` for anything else.
+    # Builds an instrument object from its details without asking UBI again.
+    # @param details The named list UBI returned for one instrument from `/api/instruments/details`.
+    # @return A `NonTradeableInstrument` for an index, or a `TradeableInstrument` for anything else.
     instrument_from = function(details) {
       if (endsWith(details[["segment"]], INSTRUMENTS_INDEX_SEGMENT_SUFFIX)) {
         return(
@@ -236,9 +236,9 @@ MemberResolver <- R6::R6Class(
       )
     },
 
-    #' Writes a value the way a Python f-string would, with `NULL` as `None`.
-    #' @param value A scalar or `NULL`.
-    #' @return A character value.
+    # Writes a value the way a Python f-string would, with `NULL` as `None`.
+    # @param value A scalar or `NULL`.
+    # @return A character value.
     python_text = function(value) {
       if (is.null(value)) {
         return("None")
@@ -246,9 +246,9 @@ MemberResolver <- R6::R6Class(
       as.character(value)
     },
 
-    #' Writes a value the way Python's `repr` writes it, so a named list reads like a dictionary.
-    #' @param value A named list, a scalar, a `Date` or `NULL`.
-    #' @return A character value such as `"{'exchange': 'nse', 'symbol': 'INFY'}"`.
+    # Writes a value the way Python's `repr` writes it, so a named list reads like a dictionary.
+    # @param value A named list, a scalar, a `Date` or `NULL`.
+    # @return A character value such as `"{'exchange': 'nse', 'symbol': 'INFY'}"`.
     python_repr = function(value) {
       if (is.null(value)) {
         return("None")

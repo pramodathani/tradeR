@@ -3847,13 +3847,13 @@ CandlestickPatterns <- R6::R6Class(
     }
   ),
   private = list(
-    #' @description
-    #' Runs one of the `talib` package's candlestick recognisers over the candles and returns its signals as Python's `talib` gives them.
-    #'
-    #' The `talib` package reports a match as 1 or -1 unless its `talib.normalize` option is `FALSE`, so the option is set to `FALSE` for the call and restored afterwards. Candles at the start with a missing price are skipped, as Python's `talib` skips them, and every row without a signal, including the first candles that TA-Lib cannot judge, gets 0.
-    #' @param prices The `data.frame` of candles, with `open`, `high`, `low` and `close` columns.
-    #' @param recogniser The `talib` function to run, such as `talib::CDLDOJI`.
-    #' @return An integer vector with one signal per candle: 100 or -100 for a match, 200 or -200 for a confirmed hikkake, and 0 otherwise.
+    # @description
+    # Runs one of the `talib` package's candlestick recognisers over the candles and returns its signals as Python's `talib` gives them.
+    #
+    # The `talib` package reports a match as 1 or -1 unless its `talib.normalize` option is `FALSE`, so the option is set to `FALSE` for the call and restored afterwards. Candles at the start with a missing price are skipped, as Python's `talib` skips them, and every row without a signal, including the first candles that TA-Lib cannot judge, gets 0.
+    # @param prices The `data.frame` of candles, with `open`, `high`, `low` and `close` columns.
+    # @param recogniser The `talib` function to run, such as `talib::CDLDOJI`.
+    # @return An integer vector with one signal per candle: 100 or -100 for a match, 200 or -200 for a confirmed hikkake, and 0 otherwise.
     pattern_signals = function(prices, recogniser) {
       candles <- data.frame(
         open = as.numeric(prices$open),

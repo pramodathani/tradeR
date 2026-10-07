@@ -302,10 +302,10 @@ BacktestStrategy <- R6::R6Class(
     broker = NULL,
     indicator_values = NULL,
 
-    #' Checks an order size.
-    #' @param size The numeric size given to `buy()` or `sell()`.
-    #' @return `NULL`, invisibly.
-    #' @details Errors: signals `ValueError` when `size` is neither a fraction between 0 and 1 nor a whole number of at least 1.
+    # Checks an order size.
+    # @param size The numeric size given to `buy()` or `sell()`.
+    # @return `NULL`, invisibly.
+    # @details Errors: signals `ValueError` when `size` is neither a fraction between 0 and 1 nor a whole number of at least 1.
     check_size = function(size) {
       is_fraction <- size > 0 && size < 1
       is_whole_units <- round(size) == size && size >= 1

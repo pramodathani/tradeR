@@ -2170,17 +2170,17 @@ PriceStatistics <- R6::R6Class(
     }
   ),
   private = list(
-    #' Keeps the values that are present.
-    #' @param values A numeric vector that may hold `NA`.
-    #' @return A numeric vector of the values that are not `NA`, in their order.
+    # Keeps the values that are present.
+    # @param values A numeric vector that may hold `NA`.
+    # @return A numeric vector of the values that are not `NA`, in their order.
     price_statistics_present = function(values) {
       values <- as.numeric(values)
       values[!is.na(values)]
     },
 
-    #' Finds the largest value that is present.
-    #' @param values A numeric vector that may hold `NA`.
-    #' @return The largest value as a numeric, or `NA` when no value is present, as pandas' `max()` gives `NaN`.
+    # Finds the largest value that is present.
+    # @param values A numeric vector that may hold `NA`.
+    # @return The largest value as a numeric, or `NA` when no value is present, as pandas' `max()` gives `NaN`.
     price_statistics_largest = function(values) {
       present <- private$price_statistics_present(values)
       if (length(present) == 0) {
@@ -2189,9 +2189,9 @@ PriceStatistics <- R6::R6Class(
       max(present)
     },
 
-    #' Finds the smallest value that is present.
-    #' @param values A numeric vector that may hold `NA`.
-    #' @return The smallest value as a numeric, or `NA` when no value is present, as pandas' `min()` gives `NaN`.
+    # Finds the smallest value that is present.
+    # @param values A numeric vector that may hold `NA`.
+    # @return The smallest value as a numeric, or `NA` when no value is present, as pandas' `min()` gives `NaN`.
     price_statistics_smallest = function(values) {
       present <- private$price_statistics_present(values)
       if (length(present) == 0) {
@@ -2200,18 +2200,18 @@ PriceStatistics <- R6::R6Class(
       min(present)
     },
 
-    #' Finds the mean absolute deviation of the values from their mean.
-    #' @param values A numeric vector that may hold `NA`, which is left out.
-    #' @return The mean absolute deviation as a numeric, or `NaN` when no value is present.
+    # Finds the mean absolute deviation of the values from their mean.
+    # @param values A numeric vector that may hold `NA`, which is left out.
+    # @return The mean absolute deviation as a numeric, or `NaN` when no value is present.
     price_statistics_mean_absolute_deviation = function(values) {
       present <- private$price_statistics_present(values)
       deviations <- present - mean(present)
       mean(abs(deviations))
     },
 
-    #' Finds the bias-corrected skewness of the values, as pandas' `skew()` does.
-    #' @param values A numeric vector that may hold `NA`, which is left out.
-    #' @return The adjusted Fisher-Pearson skewness as a numeric, `0` when the values are all the same, or `NA` when fewer than three values are present.
+    # Finds the bias-corrected skewness of the values, as pandas' `skew()` does.
+    # @param values A numeric vector that may hold `NA`, which is left out.
+    # @return The adjusted Fisher-Pearson skewness as a numeric, `0` when the values are all the same, or `NA` when fewer than three values are present.
     price_statistics_skewness = function(values) {
       present <- private$price_statistics_present(values)
       count <- length(present)
@@ -2235,9 +2235,9 @@ PriceStatistics <- R6::R6Class(
       scale * third_moment / second_moment^1.5
     },
 
-    #' Finds the bias-corrected excess kurtosis of the values, as pandas' `kurtosis()` does.
-    #' @param values A numeric vector that may hold `NA`, which is left out.
-    #' @return Fisher's excess kurtosis with the sample correction as a numeric, `0` when the values are all the same, or `NA` when fewer than four values are present.
+    # Finds the bias-corrected excess kurtosis of the values, as pandas' `kurtosis()` does.
+    # @param values A numeric vector that may hold `NA`, which is left out.
+    # @return Fisher's excess kurtosis with the sample correction as a numeric, `0` when the values are all the same, or `NA` when fewer than four values are present.
     price_statistics_kurtosis = function(values) {
       present <- private$price_statistics_present(values)
       count <- length(present)
@@ -2263,10 +2263,10 @@ PriceStatistics <- R6::R6Class(
       numerator / denominator - correction
     },
 
-    #' Finds a quantile of the values by linear interpolation, as pandas' `quantile()` does.
-    #' @param values A numeric vector that may hold `NA`, which is left out.
-    #' @param quantile The numeric quantile to find, between 0 and 1.
-    #' @return The quantile as a numeric, or `NA` when no value is present.
+    # Finds a quantile of the values by linear interpolation, as pandas' `quantile()` does.
+    # @param values A numeric vector that may hold `NA`, which is left out.
+    # @param quantile The numeric quantile to find, between 0 and 1.
+    # @return The quantile as a numeric, or `NA` when no value is present.
     price_statistics_quantile = function(values, quantile) {
       present <- private$price_statistics_present(values)
       if (length(present) == 0) {
@@ -2275,9 +2275,9 @@ PriceStatistics <- R6::R6Class(
       stats::quantile(present, probs = quantile, names = FALSE, type = 7)
     },
 
-    #' Summarises the values with the eight figures pandas' `describe()` gives.
-    #' @param values A numeric vector that may hold `NA`, which is left out of every figure.
-    #' @return A named numeric vector with `count`, `mean`, `std`, `min`, `25%`, `50%`, `75%` and `max`.
+    # Summarises the values with the eight figures pandas' `describe()` gives.
+    # @param values A numeric vector that may hold `NA`, which is left out of every figure.
+    # @return A named numeric vector with `count`, `mean`, `std`, `min`, `25%`, `50%`, `75%` and `max`.
     price_statistics_summary = function(values) {
       present <- private$price_statistics_present(values)
       c(
@@ -2292,13 +2292,13 @@ PriceStatistics <- R6::R6Class(
       )
     },
 
-    #' Draws a histogram of the values with equal-width bins, as NumPy and matplotlib do.
-    #'
-    #' The bins run from the smallest to the largest value, or half a unit either side when every value is the same. Each bin holds the values from its lower edge up to but not including its upper edge, except the last, which also holds its upper edge.
-    #' @param values A numeric vector that may hold `NA`, which is left out.
-    #' @param bins The integer number of bins.
-    #' @param label The character name of the column, used for the title and the axis label.
-    #' @return The `histogram` object from `graphics::hist()`.
+    # Draws a histogram of the values with equal-width bins, as NumPy and matplotlib do.
+    #
+    # The bins run from the smallest to the largest value, or half a unit either side when every value is the same. Each bin holds the values from its lower edge up to but not including its upper edge, except the last, which also holds its upper edge.
+    # @param values A numeric vector that may hold `NA`, which is left out.
+    # @param bins The integer number of bins.
+    # @param label The character name of the column, used for the title and the axis label.
+    # @return The `histogram` object from `graphics::hist()`.
     price_statistics_histogram = function(values, bins, label) {
       present <- private$price_statistics_present(values)
       lower_edge <- min(present)

@@ -315,11 +315,11 @@ Index <- R6::R6Class(
     }
   ),
   private = list(
-    #' Works out the fixed quantity of each member the index's candles are built from.
-    #'
-    #' A price weighting holds the same quantity of every member, sized so the first close equals `base_value`. Any other weighting spreads `base_value` by weight, as `AssetBasket` does.
-    #' @param first_closes A named numeric vector of each member's close at the first shared candle, named by member label.
-    #' @return A named numeric vector of quantities, named by member label.
+    # Works out the fixed quantity of each member the index's candles are built from.
+    #
+    # A price weighting holds the same quantity of every member, sized so the first close equals `base_value`. Any other weighting spreads `base_value` by weight, as `AssetBasket` does.
+    # @param first_closes A named numeric vector of each member's close at the first shared candle, named by member label.
+    # @return A named numeric vector of quantities, named by member label.
     candle_quantities = function(first_closes) {
       if (self$weighting == ASSET_BASKETS_PRICE_WEIGHTING) {
         equal_quantity <- self$base_value / sum(first_closes)

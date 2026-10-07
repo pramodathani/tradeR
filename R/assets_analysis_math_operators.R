@@ -555,12 +555,12 @@ MathOperators <- R6::R6Class(
     }
   ),
   private = list(
-    #' @description
-    #' Signals TA-Lib's error for a window it does not accept.
-    #' @param window The integer number of candles in each calculation window.
-    #' @param function_name The character name of the TA-Lib function being imitated, such as `"TA_MAXINDEX"`.
-    #' @return `NULL`, invisibly, when `window` is between 2 and 100000.
-    #' @details Errors: signals a plain error when `window` is below 2 or above 100000.
+    # @description
+    # Signals TA-Lib's error for a window it does not accept.
+    # @param window The integer number of candles in each calculation window.
+    # @param function_name The character name of the TA-Lib function being imitated, such as `"TA_MAXINDEX"`.
+    # @return `NULL`, invisibly, when `window` is between 2 and 100000.
+    # @details Errors: signals a plain error when `window` is below 2 or above 100000.
     check_window = function(window, function_name) {
       if (window < 2 || window > 100000) {
         stop(
@@ -574,12 +574,12 @@ MathOperators <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' @description
-    #' Finds the first position of a vector that holds a value.
-    #'
-    #' Python's `talib` skips missing values at the start of its input before calling TA-Lib and reports them as missing, and this position is where that skipping stops.
-    #' @param values A numeric vector.
-    #' @return The integer position of the first value that is not `NA`, or one more than the length when there is none.
+    # @description
+    # Finds the first position of a vector that holds a value.
+    #
+    # Python's `talib` skips missing values at the start of its input before calling TA-Lib and reports them as missing, and this position is where that skipping stops.
+    # @param values A numeric vector.
+    # @return The integer position of the first value that is not `NA`, or one more than the length when there is none.
     first_present_position = function(values) {
       position <- 1
       while (position <= length(values) && is.na(values[[position]])) {
@@ -588,41 +588,41 @@ MathOperators <- R6::R6Class(
       position
     },
 
-    #' @description
-    #' Calculates TA-Lib's rolling maximum.
-    #'
-    #' The value is read at the position `scan_highest()` finds, which is what TA-Lib 0.6.4's `TA_MAX` returns. The `talib` package's `MAX` is not used, because it treats a missing value inside the data differently from Python's `talib`.
-    #' @param values A numeric vector, such as a candle column.
-    #' @param window The integer number of values in each window.
-    #' @return A numeric vector the length of `values`, `NA` until the first full window.
-    #' @details Errors: signals a plain error when `window` is below 2 or above 100000.
+    # @description
+    # Calculates TA-Lib's rolling maximum.
+    #
+    # The value is read at the position `scan_highest()` finds, which is what TA-Lib 0.6.4's `TA_MAX` returns. The `talib` package's `MAX` is not used, because it treats a missing value inside the data differently from Python's `talib`.
+    # @param values A numeric vector, such as a candle column.
+    # @param window The integer number of values in each window.
+    # @return A numeric vector the length of `values`, `NA` until the first full window.
+    # @details Errors: signals a plain error when `window` is below 2 or above 100000.
     rolling_maximum = function(values, window) {
       values <- as.numeric(values)
       positions <- private$scan_highest(values, window, "TA_MAX")
       values[positions]
     },
 
-    #' @description
-    #' Calculates TA-Lib's rolling minimum.
-    #'
-    #' The value is read at the position `scan_lowest()` finds, which is what TA-Lib 0.6.4's `TA_MIN` returns. The `talib` package's `MIN` is not used, because it treats a missing value inside the data differently from Python's `talib`.
-    #' @param values A numeric vector, such as a candle column.
-    #' @param window The integer number of values in each window.
-    #' @return A numeric vector the length of `values`, `NA` until the first full window.
-    #' @details Errors: signals a plain error when `window` is below 2 or above 100000.
+    # @description
+    # Calculates TA-Lib's rolling minimum.
+    #
+    # The value is read at the position `scan_lowest()` finds, which is what TA-Lib 0.6.4's `TA_MIN` returns. The `talib` package's `MIN` is not used, because it treats a missing value inside the data differently from Python's `talib`.
+    # @param values A numeric vector, such as a candle column.
+    # @param window The integer number of values in each window.
+    # @return A numeric vector the length of `values`, `NA` until the first full window.
+    # @details Errors: signals a plain error when `window` is below 2 or above 100000.
     rolling_minimum = function(values, window) {
       values <- as.numeric(values)
       positions <- private$scan_lowest(values, window, "TA_MIN")
       values[positions]
     },
 
-    #' @description
-    #' Gives the position of the highest value in each window counted from 0, as TA-Lib's `TA_MAXINDEX` reports it.
-    #' @param values A numeric vector, such as a candle column.
-    #' @param window The integer number of values in each window.
-    #' @param function_name The character name of the TA-Lib function being imitated, used in the error message.
-    #' @return An integer vector the length of `values` of positions counted from 0, with 0 where there is no full window, as Python's `talib` gives.
-    #' @details Errors: signals a plain error when `window` is below 2 or above 100000.
+    # @description
+    # Gives the position of the highest value in each window counted from 0, as TA-Lib's `TA_MAXINDEX` reports it.
+    # @param values A numeric vector, such as a candle column.
+    # @param window The integer number of values in each window.
+    # @param function_name The character name of the TA-Lib function being imitated, used in the error message.
+    # @return An integer vector the length of `values` of positions counted from 0, with 0 where there is no full window, as Python's `talib` gives.
+    # @details Errors: signals a plain error when `window` is below 2 or above 100000.
     highest_positions = function(values, window, function_name) {
       positions <- private$scan_highest(
         as.numeric(values),
@@ -634,13 +634,13 @@ MathOperators <- R6::R6Class(
       positions
     },
 
-    #' @description
-    #' Gives the position of the lowest value in each window counted from 0, as TA-Lib's `TA_MININDEX` reports it.
-    #' @param values A numeric vector, such as a candle column.
-    #' @param window The integer number of values in each window.
-    #' @param function_name The character name of the TA-Lib function being imitated, used in the error message.
-    #' @return An integer vector the length of `values` of positions counted from 0, with 0 where there is no full window, as Python's `talib` gives.
-    #' @details Errors: signals a plain error when `window` is below 2 or above 100000.
+    # @description
+    # Gives the position of the lowest value in each window counted from 0, as TA-Lib's `TA_MININDEX` reports it.
+    # @param values A numeric vector, such as a candle column.
+    # @param window The integer number of values in each window.
+    # @param function_name The character name of the TA-Lib function being imitated, used in the error message.
+    # @return An integer vector the length of `values` of positions counted from 0, with 0 where there is no full window, as Python's `talib` gives.
+    # @details Errors: signals a plain error when `window` is below 2 or above 100000.
     lowest_positions = function(values, window, function_name) {
       positions <- private$scan_lowest(
         as.numeric(values),
@@ -652,15 +652,15 @@ MathOperators <- R6::R6Class(
       positions
     },
 
-    #' @description
-    #' Finds the position of the highest value in each window, following TA-Lib 0.6.4's loop for `TA_MAX` and `TA_MAXINDEX` step by step.
-    #'
-    #' Ties and missing values therefore resolve as they do in TA-Lib: a rescan of the window keeps the earliest of equal values, a new value equal to the current highest takes its place, and a comparison with a missing value is false. As the Python wrapper does, missing values at the start are skipped.
-    #' @param values A numeric vector, such as a candle column.
-    #' @param window The integer number of values in each window.
-    #' @param function_name The character name of the TA-Lib function being imitated, used in the error message.
-    #' @return An integer vector the length of `values` of positions counted from 1, with `NA` where there is no full window.
-    #' @details Errors: signals a plain error when `window` is below 2 or above 100000.
+    # @description
+    # Finds the position of the highest value in each window, following TA-Lib 0.6.4's loop for `TA_MAX` and `TA_MAXINDEX` step by step.
+    #
+    # Ties and missing values therefore resolve as they do in TA-Lib: a rescan of the window keeps the earliest of equal values, a new value equal to the current highest takes its place, and a comparison with a missing value is false. As the Python wrapper does, missing values at the start are skipped.
+    # @param values A numeric vector, such as a candle column.
+    # @param window The integer number of values in each window.
+    # @param function_name The character name of the TA-Lib function being imitated, used in the error message.
+    # @return An integer vector the length of `values` of positions counted from 1, with `NA` where there is no full window.
+    # @details Errors: signals a plain error when `window` is below 2 or above 100000.
     scan_highest = function(values, window, function_name) {
       private$check_window(window, function_name)
       count <- length(values)
@@ -695,15 +695,15 @@ MathOperators <- R6::R6Class(
       positions
     },
 
-    #' @description
-    #' Finds the position of the lowest value in each window, following TA-Lib 0.6.4's loop for `TA_MIN` and `TA_MININDEX` step by step.
-    #'
-    #' Ties and missing values therefore resolve as they do in TA-Lib: a rescan of the window keeps the earliest of equal values, a new value equal to the current lowest takes its place, and a comparison with a missing value is false. As the Python wrapper does, missing values at the start are skipped.
-    #' @param values A numeric vector, such as a candle column.
-    #' @param window The integer number of values in each window.
-    #' @param function_name The character name of the TA-Lib function being imitated, used in the error message.
-    #' @return An integer vector the length of `values` of positions counted from 1, with `NA` where there is no full window.
-    #' @details Errors: signals a plain error when `window` is below 2 or above 100000.
+    # @description
+    # Finds the position of the lowest value in each window, following TA-Lib 0.6.4's loop for `TA_MIN` and `TA_MININDEX` step by step.
+    #
+    # Ties and missing values therefore resolve as they do in TA-Lib: a rescan of the window keeps the earliest of equal values, a new value equal to the current lowest takes its place, and a comparison with a missing value is false. As the Python wrapper does, missing values at the start are skipped.
+    # @param values A numeric vector, such as a candle column.
+    # @param window The integer number of values in each window.
+    # @param function_name The character name of the TA-Lib function being imitated, used in the error message.
+    # @return An integer vector the length of `values` of positions counted from 1, with `NA` where there is no full window.
+    # @details Errors: signals a plain error when `window` is below 2 or above 100000.
     scan_lowest = function(values, window, function_name) {
       private$check_window(window, function_name)
       count <- length(values)

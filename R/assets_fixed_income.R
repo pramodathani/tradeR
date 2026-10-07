@@ -319,9 +319,9 @@ FixedIncome <- R6::R6Class(
     }
   ),
   private = list(
-    #' Reads this bond's holding once, refusing when it is not held.
-    #' @return The named list holdings row for this bond.
-    #' @details Errors: signals `HoldingError` when no broker holds this bond, and a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
+    # Reads this bond's holding once, refusing when it is not held.
+    # @return The named list holdings row for this bond.
+    # @details Errors: signals `HoldingError` when no broker holds this bond, and a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
     held_row = function() {
       row <- self$holdings
       if (is.null(row)) {
@@ -337,23 +337,23 @@ FixedIncome <- R6::R6Class(
       row
     },
 
-    #' Works out how many of the units held can be sold.
-    #' @param row The named list holdings row, with `quantity` and `collateral_quantity`.
-    #' @return The integer number of units that are not pledged as collateral.
+    # Works out how many of the units held can be sold.
+    # @param row The named list holdings row, with `quantity` and `collateral_quantity`.
+    # @return The integer number of units that are not pledged as collateral.
     free_quantity = function(row) {
       as.integer(row[["quantity"]] - row[["collateral_quantity"]])
     },
 
-    #' Sends the sell order that reduces the holding.
-    #'
-    #' A limit order is sent to a broker at once, and without a price the order is sent as a real market order, because a cash bond has no quote for UBI's order engine to hold a limit against or to price a marketable limit from.
-    #' @param quantity The integer number of units to sell.
-    #' @param price The numeric limit price in rupees, or `NULL` to send a market order.
-    #' @param validity The character validity, or `NULL`.
-    #' @param after_market A logical that is `TRUE` to send the order as an after-market order.
-    #' @param tag A character label for the order, or `NULL`.
-    #' @return The named list `place_order()` returns.
-    #' @details Errors: signals a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
+    # Sends the sell order that reduces the holding.
+    #
+    # A limit order is sent to a broker at once, and without a price the order is sent as a real market order, because a cash bond has no quote for UBI's order engine to hold a limit against or to price a marketable limit from.
+    # @param quantity The integer number of units to sell.
+    # @param price The numeric limit price in rupees, or `NULL` to send a market order.
+    # @param validity The character validity, or `NULL`.
+    # @param after_market A logical that is `TRUE` to send the order as an after-market order.
+    # @param tag A character label for the order, or `NULL`.
+    # @return The named list `place_order()` returns.
+    # @details Errors: signals a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
     sell_from_holdings = function(quantity, price, validity, after_market, tag) {
       if (is.null(price)) {
         return(

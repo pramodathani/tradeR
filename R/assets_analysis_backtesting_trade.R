@@ -229,8 +229,8 @@ BacktestTrade <- R6::R6Class(
   private = list(
     broker = NULL,
 
-    #' Gives the price the trade is valued at.
-    #' @return The numeric exit price, or the latest close while the trade is open.
+    # Gives the price the trade is valued at.
+    # @return The numeric exit price, or the latest close while the trade is open.
     current_price = function() {
       if (!is.null(self$exit_price)) {
         return(self$exit_price)
@@ -238,11 +238,11 @@ BacktestTrade <- R6::R6Class(
       private$broker$last_price
     },
 
-    #' Places, replaces or cancels the stop-loss or take-profit order.
-    #' @param kind The character `"sl"` or `"tp"`.
-    #' @param price The numeric price, or `NULL` to cancel.
-    #' @return `NULL`, invisibly.
-    #' @details Errors: signals `ValueError` when `price` is not above zero and finite.
+    # Places, replaces or cancels the stop-loss or take-profit order.
+    # @param kind The character `"sl"` or `"tp"`.
+    # @param price The numeric price, or `NULL` to cancel.
+    # @return `NULL`, invisibly.
+    # @details Errors: signals `ValueError` when `price` is not above zero and finite.
     set_contingent = function(kind, price) {
       if (!is.null(price) && !(price > 0 && is.finite(price))) {
         ErrorCatalogue$raise(

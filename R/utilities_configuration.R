@@ -123,9 +123,9 @@ Configuration <- R6::R6Class(
     load_environment_file = TRUE,
     environment_file_loaded = FALSE,
 
-    #' Reads one environment variable, loading the environment file first if needed.
-    #' @param variable_name A character name of the environment variable.
-    #' @return The character value of the variable, or `NULL` if it is not set.
+    # Reads one environment variable, loading the environment file first if needed.
+    # @param variable_name A character name of the environment variable.
+    # @return The character value of the variable, or `NULL` if it is not set.
     read = function(variable_name) {
       private$ensure_environment_file_loaded()
       value <- Sys.getenv(variable_name, unset = NA)
@@ -135,8 +135,8 @@ Configuration <- R6::R6Class(
       value
     },
 
-    #' Loads the environment file once, if loading it was asked for, without replacing a variable already set.
-    #' @return `NULL`, invisibly.
+    # Loads the environment file once, if loading it was asked for, without replacing a variable already set.
+    # @return `NULL`, invisibly.
     ensure_environment_file_loaded = function() {
       if (private$environment_file_loaded) {
         return(invisible(NULL))
@@ -158,9 +158,9 @@ Configuration <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' Writes a missing value the way Python formats None inside the connection string.
-    #' @param value A character value, or `NULL`.
-    #' @return The character value, or `"None"` when it is `NULL`.
+    # Writes a missing value the way Python formats None inside the connection string.
+    # @param value A character value, or `NULL`.
+    # @return The character value, or `"None"` when it is `NULL`.
     text_or_none = function(value) {
       if (is.null(value)) {
         return("None")

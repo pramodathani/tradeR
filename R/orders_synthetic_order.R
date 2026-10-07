@@ -455,11 +455,11 @@ SyntheticOrder <- R6::R6Class(
     }
   ),
   private = list(
-    #' Gives the engine's id for this order, refusing when it has not been placed.
-    #'
-    #' Returns the character `parent_id` that `place()` kept.
-    #'
-    #' Errors: signals `ValueError` when `place()` has not been called, was a dry run, or was answered without a `parent_id`.
+    # Gives the engine's id for this order, refusing when it has not been placed.
+    #
+    # Returns the character `parent_id` that `place()` kept.
+    #
+    # Errors: signals `ValueError` when `place()` has not been called, was a dry run, or was answered without a `parent_id`.
     placed_parent_id = function() {
       if (is.null(self$parent_id)) {
         ErrorCatalogue$raise(

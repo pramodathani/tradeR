@@ -168,10 +168,10 @@ Backtest <- R6::R6Class(
     }
   ),
   private = list(
-    #' Checks that a strategy is a class generator inheriting `BacktestStrategy`.
-    #' @param strategy The value given as the strategy.
-    #' @return `NULL`, invisibly.
-    #' @details Errors: signals `TypeError` when it is not.
+    # Checks that a strategy is a class generator inheriting `BacktestStrategy`.
+    # @param strategy The value given as the strategy.
+    # @return `NULL`, invisibly.
+    # @details Errors: signals `TypeError` when it is not.
     check_strategy = function(strategy) {
       generator <- NULL
       if (inherits(strategy, "R6ClassGenerator")) {
@@ -189,11 +189,11 @@ Backtest <- R6::R6Class(
       )
     },
 
-    #' Checks the candles and puts them in time order.
-    #' @param data The `data.frame` of candles.
-    #' @param cash The numeric starting cash, for the warning about prices above it.
-    #' @return The `data.frame` with `datetime`, `Open`, `High`, `Low`, `Close` and `Volume` columns, sorted by `datetime`.
-    #' @details Errors: signals `TypeError` when `data` is not a `data.frame`; `ValueError` when it is empty, lacks a column or has a missing price.
+    # Checks the candles and puts them in time order.
+    # @param data The `data.frame` of candles.
+    # @param cash The numeric starting cash, for the warning about prices above it.
+    # @return The `data.frame` with `datetime`, `Open`, `High`, `Low`, `Close` and `Volume` columns, sorted by `datetime`.
+    # @details Errors: signals `TypeError` when `data` is not a `data.frame`; `ValueError` when it is empty, lacks a column or has a missing price.
     checked_candles = function(data, cash) {
       if (!is.data.frame(data)) {
         ErrorCatalogue$raise(
@@ -251,10 +251,10 @@ Backtest <- R6::R6Class(
       candles
     },
 
-    #' Fills the equity of the candles before the strategy started with the first recorded equity, and any candle without one with the final cash.
-    #' @param equity_curve A numeric vector with `NA` for candles without a recorded equity.
-    #' @param cash The numeric cash at the end of the run.
-    #' @return A numeric vector without missing values.
+    # Fills the equity of the candles before the strategy started with the first recorded equity, and any candle without one with the final cash.
+    # @param equity_curve A numeric vector with `NA` for candles without a recorded equity.
+    # @param cash The numeric cash at the end of the run.
+    # @return A numeric vector without missing values.
     filled_equity = function(equity_curve, cash) {
       filled <- equity_curve
       next_value <- NA_real_

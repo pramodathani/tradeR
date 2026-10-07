@@ -340,9 +340,9 @@ BacktestBroker <- R6::R6Class(
     }
   ),
   private = list(
-    #' Writes an optional price for an error message, as Python prints `None`.
-    #' @param price A numeric price or `NULL`.
-    #' @return A character value.
+    # Writes an optional price for an error message, as Python prints `None`.
+    # @param price A numeric price or `NULL`.
+    # @return A character value.
     describe = function(price) {
       if (is.null(price)) {
         return("None")
@@ -350,10 +350,10 @@ BacktestBroker <- R6::R6Class(
       format(price)
     },
 
-    #' Finds an object in a list by identity.
-    #' @param objects A list of R6 objects.
-    #' @param target The R6 object to look for.
-    #' @return The integer position of `target` in `objects`, or 0 when it is absent.
+    # Finds an object in a list by identity.
+    # @param objects A list of R6 objects.
+    # @param target The R6 object to look for.
+    # @return The integer position of `target` in `objects`, or 0 when it is absent.
     position_in = function(objects, target) {
       for (index in seq_along(objects)) {
         if (identical(objects[[index]], target)) {
@@ -363,8 +363,8 @@ BacktestBroker <- R6::R6Class(
       0
     },
 
-    #' Cancels every waiting order that is not a stop-loss or take-profit, walking the queue the way backtesting.py does.
-    #' @return `NULL`, invisibly.
+    # Cancels every waiting order that is not a stop-loss or take-profit, walking the queue the way backtesting.py does.
+    # @return `NULL`, invisibly.
     cancel_standalone_orders = function() {
       index <- 1
       while (index <= length(self$orders)) {
@@ -377,8 +377,8 @@ BacktestBroker <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' Fills the waiting orders that the current candle allows.
-    #' @return `NULL`, invisibly.
+    # Fills the waiting orders that the current candle allows.
+    # @return `NULL`, invisibly.
     process_orders = function() {
       bar <- self$current_bar
       open <- self$candles$Open[[bar]]
@@ -466,12 +466,12 @@ BacktestBroker <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' Fills an order that closes all or part of its parent trade.
-    #' @param order The `BacktestOrder` with a parent trade.
-    #' @param price The numeric fill price.
-    #' @param stop_price The numeric stop price the order had before it was reached, or `NULL`.
-    #' @param time_index The integer candle number to record as the exit.
-    #' @return `NULL`, invisibly.
+    # Fills an order that closes all or part of its parent trade.
+    # @param order The `BacktestOrder` with a parent trade.
+    # @param price The numeric fill price.
+    # @param stop_price The numeric stop price the order had before it was reached, or `NULL`.
+    # @param time_index The integer candle number to record as the exit.
+    # @return `NULL`, invisibly.
     fill_closing_order = function(order, price, stop_price, time_index) {
       trade <- order$parent_trade
       previous_size <- trade$size
@@ -492,15 +492,15 @@ BacktestBroker <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' Fills an order that opens a trade, after closing opposite trades when hedging is off.
-    #' @param order The `BacktestOrder` without a parent trade.
-    #' @param price The numeric fill price.
-    #' @param stop_price The numeric stop price the order had before it was reached, or `NULL`.
-    #' @param time_index The integer candle number to record as the entry.
-    #' @param is_market_order A logical that is `TRUE` when the order had neither a limit nor a stop.
-    #' @param high The numeric high of the current candle.
-    #' @param low The numeric low of the current candle.
-    #' @return A logical that is `TRUE` when the queue must be processed again for the new trade's stop-loss or take-profit order.
+    # Fills an order that opens a trade, after closing opposite trades when hedging is off.
+    # @param order The `BacktestOrder` without a parent trade.
+    # @param price The numeric fill price.
+    # @param stop_price The numeric stop price the order had before it was reached, or `NULL`.
+    # @param time_index The integer candle number to record as the entry.
+    # @param is_market_order A logical that is `TRUE` when the order had neither a limit nor a stop.
+    # @param high The numeric high of the current candle.
+    # @param low The numeric low of the current candle.
+    # @return A logical that is `TRUE` when the queue must be processed again for the new trade's stop-loss or take-profit order.
     fill_opening_order = function(
       order,
       price,
@@ -577,13 +577,13 @@ BacktestBroker <- R6::R6Class(
       reprocess_orders
     },
 
-    #' Decides whether a new trade's stop-loss or take-profit order may fill on the candle the trade opened on.
-    #' @param order The `BacktestOrder` that opened the trade.
-    #' @param stop_price The numeric stop price the order had, or `NULL`.
-    #' @param is_market_order A logical that is `TRUE` when the order had neither a limit nor a stop.
-    #' @param high The numeric high of the current candle.
-    #' @param low The numeric low of the current candle.
-    #' @return A logical that is `TRUE` when the queue must be processed again.
+    # Decides whether a new trade's stop-loss or take-profit order may fill on the candle the trade opened on.
+    # @param order The `BacktestOrder` that opened the trade.
+    # @param stop_price The numeric stop price the order had, or `NULL`.
+    # @param is_market_order A logical that is `TRUE` when the order had neither a limit nor a stop.
+    # @param high The numeric high of the current candle.
+    # @param low The numeric low of the current candle.
+    # @return A logical that is `TRUE` when the queue must be processed again.
     needs_reprocessing = function(
       order,
       stop_price,
@@ -628,12 +628,12 @@ BacktestBroker <- R6::R6Class(
       FALSE
     },
 
-    #' Closes part of a trade by splitting off a closed copy of that part.
-    #' @param trade The open `BacktestTrade`.
-    #' @param price The numeric exit price.
-    #' @param size The numeric number of units to close, with the opposite sign to the trade's size.
-    #' @param time_index The integer candle number to record as the exit.
-    #' @return `NULL`, invisibly.
+    # Closes part of a trade by splitting off a closed copy of that part.
+    # @param trade The open `BacktestTrade`.
+    # @param price The numeric exit price.
+    # @param size The numeric number of units to close, with the opposite sign to the trade's size.
+    # @param time_index The integer candle number to record as the exit.
+    # @return `NULL`, invisibly.
     reduce_trade = function(trade, price, size, time_index) {
       size_left <- trade$size + size
       if (size_left == 0) {
@@ -656,11 +656,11 @@ BacktestBroker <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' Closes a whole trade, settles its profit and commission in cash and moves it to the closed trades.
-    #' @param trade The open `BacktestTrade`.
-    #' @param price The numeric exit price.
-    #' @param time_index The integer candle number to record as the exit.
-    #' @return `NULL`, invisibly.
+    # Closes a whole trade, settles its profit and commission in cash and moves it to the closed trades.
+    # @param trade The open `BacktestTrade`.
+    # @param price The numeric exit price.
+    # @param time_index The integer candle number to record as the exit.
+    # @return `NULL`, invisibly.
     close_trade = function(trade, price, time_index) {
       position <- private$position_in(self$trades, trade)
       if (position > 0) {
@@ -682,14 +682,14 @@ BacktestBroker <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' Opens a trade, pays its opening commission and places its stop-loss and take-profit orders.
-    #' @param price The numeric entry price.
-    #' @param size The numeric number of units, positive for long and negative for short.
-    #' @param sl The numeric stop-loss price, or `NULL`.
-    #' @param tp The numeric take-profit price, or `NULL`.
-    #' @param time_index The integer candle number to record as the entry.
-    #' @param tag Any value copied from the order, or `NULL`.
-    #' @return `NULL`, invisibly.
+    # Opens a trade, pays its opening commission and places its stop-loss and take-profit orders.
+    # @param price The numeric entry price.
+    # @param size The numeric number of units, positive for long and negative for short.
+    # @param sl The numeric stop-loss price, or `NULL`.
+    # @param tp The numeric take-profit price, or `NULL`.
+    # @param time_index The integer candle number to record as the entry.
+    # @param tag Any value copied from the order, or `NULL`.
+    # @return `NULL`, invisibly.
     open_trade = function(price, size, sl, tp, time_index, tag) {
       trade <- BacktestTrade$new(self, size, price, time_index, tag)
       self$trades[[length(self$trades) + 1]] <- trade

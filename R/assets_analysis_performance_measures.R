@@ -1047,10 +1047,10 @@ PerformanceMeasures <- R6::R6Class(
     }
   ),
   private = list(
-    #' Counts the candles of an interval in one trading year.
-    #' @param interval The character candle interval, such as `"day"` or `"5minute"`.
-    #' @return The numeric number of candles in 252 trading sessions of 375 minutes each.
-    #' @details Errors: signals `ValueError` when the interval is neither `day` nor a minute interval such as `5minute`.
+    # Counts the candles of an interval in one trading year.
+    # @param interval The character candle interval, such as `"day"` or `"5minute"`.
+    # @return The numeric number of candles in 252 trading sessions of 375 minutes each.
+    # @details Errors: signals `ValueError` when the interval is neither `day` nor a minute interval such as `5minute`.
     periods_per_year = function(interval) {
       if (identical(interval, PERFORMANCE_MEASURES_DAY_INTERVAL)) {
         return(PERFORMANCE_MEASURES_TRADING_DAYS_PER_YEAR)
@@ -1075,11 +1075,11 @@ PerformanceMeasures <- R6::R6Class(
         minutes
     },
 
-    #' Checks a confidence level and a value at risk method.
-    #' @param confidence The numeric confidence level, which must lie strictly between 0 and 1.
-    #' @param method The character method, which must be `"historical"` or `"parametric"`.
-    #' @return `NULL`, invisibly.
-    #' @details Errors: signals `ValueError` when the confidence or the method is not valid.
+    # Checks a confidence level and a value at risk method.
+    # @param confidence The numeric confidence level, which must lie strictly between 0 and 1.
+    # @param method The character method, which must be `"historical"` or `"parametric"`.
+    # @return `NULL`, invisibly.
+    # @details Errors: signals `ValueError` when the confidence or the method is not valid.
     check_value_at_risk_arguments = function(confidence, method) {
       if (!(confidence > 0 && confidence < 1)) {
         ErrorCatalogue$raise(
@@ -1103,14 +1103,14 @@ PerformanceMeasures <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' Fetches the closing prices for a range.
-    #' @param interval The character candle interval, such as `"day"` or `"5minute"`.
-    #' @param from_date The first day of the range as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL`.
-    #' @param to_date The last day of the range as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL`.
-    #' @param days The integer number of days to count back from today, or `NULL`.
-    #' @param adjusted A logical that is `TRUE` for prices adjusted for splits and bonuses.
-    #' @return A numeric vector of closes in time order without missing values, or `NULL` when there are fewer than two.
-    #' @details Errors: signals `UnifiedBrokerInterfaceError` when UBI refused the request or could not be reached.
+    # Fetches the closing prices for a range.
+    # @param interval The character candle interval, such as `"day"` or `"5minute"`.
+    # @param from_date The first day of the range as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL`.
+    # @param to_date The last day of the range as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL`.
+    # @param days The integer number of days to count back from today, or `NULL`.
+    # @param adjusted A logical that is `TRUE` for prices adjusted for splits and bonuses.
+    # @return A numeric vector of closes in time order without missing values, or `NULL` when there are fewer than two.
+    # @details Errors: signals `UnifiedBrokerInterfaceError` when UBI refused the request or could not be reached.
     closes = function(interval, from_date, to_date, days, adjusted) {
       prices <- self$prices(
         interval = interval,
@@ -1130,23 +1130,23 @@ PerformanceMeasures <- R6::R6Class(
       closes
     },
 
-    #' Works out the fractional change from each close to the next.
-    #' @param closes A numeric vector of at least two closes in time order.
-    #' @return A numeric vector one shorter than `closes`.
+    # Works out the fractional change from each close to the next.
+    # @param closes A numeric vector of at least two closes in time order.
+    # @return A numeric vector one shorter than `closes`.
     returns_of = function(closes) {
       count <- length(closes)
       closes[-1] / closes[-count] - 1
     },
 
-    #' Fetches the returns and a benchmark's returns on the candles both have.
-    #' @param benchmark The object with a `prices()` method to match against.
-    #' @param interval The character candle interval, such as `"day"` or `"5minute"`.
-    #' @param from_date The first day of the range as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL`.
-    #' @param to_date The last day of the range as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL`.
-    #' @param days The integer number of days to count back from today, or `NULL`.
-    #' @param adjusted A logical that is `TRUE` for prices adjusted for splits and bonuses.
-    #' @return A `data.frame` with numeric `returns` and `benchmark_returns` columns, one row per matched candle after the first, or `NULL` when fewer than three candles match.
-    #' @details Errors: signals `UnifiedBrokerInterfaceError` when UBI refused the request or could not be reached.
+    # Fetches the returns and a benchmark's returns on the candles both have.
+    # @param benchmark The object with a `prices()` method to match against.
+    # @param interval The character candle interval, such as `"day"` or `"5minute"`.
+    # @param from_date The first day of the range as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL`.
+    # @param to_date The last day of the range as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL`.
+    # @param days The integer number of days to count back from today, or `NULL`.
+    # @param adjusted A logical that is `TRUE` for prices adjusted for splits and bonuses.
+    # @return A `data.frame` with numeric `returns` and `benchmark_returns` columns, one row per matched candle after the first, or `NULL` when fewer than three candles match.
+    # @details Errors: signals `UnifiedBrokerInterfaceError` when UBI refused the request or could not be reached.
     matched_returns = function(
       benchmark,
       interval,
@@ -1198,9 +1198,9 @@ PerformanceMeasures <- R6::R6Class(
       returns
     },
 
-    #' Works out the highest value so far at each position, leaving a missing value missing without letting it hide later peaks.
-    #' @param values A numeric vector that may hold `NA` values.
-    #' @return A numeric vector as long as `values`.
+    # Works out the highest value so far at each position, leaving a missing value missing without letting it hide later peaks.
+    # @param values A numeric vector that may hold `NA` values.
+    # @return A numeric vector as long as `values`.
     running_peak_of = function(values) {
       peaks <- rep(NA_real_, length(values))
       peak <- NA_real_
@@ -1217,17 +1217,17 @@ PerformanceMeasures <- R6::R6Class(
       peaks
     },
 
-    #' Calculates the growth from the first close to the last.
-    #' @param closes A numeric vector of at least two closes in time order.
-    #' @return The numeric fractional growth.
+    # Calculates the growth from the first close to the last.
+    # @param closes A numeric vector of at least two closes in time order.
+    # @return The numeric fractional growth.
     cumulative_return_of = function(closes) {
       closes[[length(closes)]] / closes[[1]] - 1
     },
 
-    #' Calculates the compound annual growth rate of a run of closes.
-    #' @param closes A numeric vector of at least two closes in time order.
-    #' @param periods_per_year The numeric number of candles in a trading year.
-    #' @return The numeric annual growth rate, or `NULL` when the first or last close is not above zero.
+    # Calculates the compound annual growth rate of a run of closes.
+    # @param closes A numeric vector of at least two closes in time order.
+    # @param periods_per_year The numeric number of candles in a trading year.
+    # @return The numeric annual growth rate, or `NULL` when the first or last close is not above zero.
     annualised_return_of = function(closes, periods_per_year) {
       first_close <- closes[[1]]
       last_close <- closes[[length(closes)]]
@@ -1239,10 +1239,10 @@ PerformanceMeasures <- R6::R6Class(
       growth^(1 / years) - 1
     },
 
-    #' Scales the standard deviation of returns to a year.
-    #' @param returns A numeric vector of returns.
-    #' @param periods_per_year The numeric number of candles in a trading year.
-    #' @return The numeric annual volatility, or `NULL` when there are fewer than two returns.
+    # Scales the standard deviation of returns to a year.
+    # @param returns A numeric vector of returns.
+    # @param periods_per_year The numeric number of candles in a trading year.
+    # @return The numeric annual volatility, or `NULL` when there are fewer than two returns.
     annualised_volatility_of = function(returns, periods_per_year) {
       if (length(returns) < 2) {
         return(NULL)
@@ -1250,11 +1250,11 @@ PerformanceMeasures <- R6::R6Class(
       stats::sd(returns) * sqrt(periods_per_year)
     },
 
-    #' Calculates the Sharpe ratio of a run of returns.
-    #' @param returns A numeric vector of returns.
-    #' @param risk_free_rate The numeric annual risk-free rate as a fraction.
-    #' @param periods_per_year The numeric number of candles in a trading year.
-    #' @return The numeric Sharpe ratio, or `NULL` when there are fewer than two returns or they never varied.
+    # Calculates the Sharpe ratio of a run of returns.
+    # @param returns A numeric vector of returns.
+    # @param risk_free_rate The numeric annual risk-free rate as a fraction.
+    # @param periods_per_year The numeric number of candles in a trading year.
+    # @return The numeric Sharpe ratio, or `NULL` when there are fewer than two returns or they never varied.
     sharpe_ratio_of = function(returns, risk_free_rate, periods_per_year) {
       if (length(returns) < 2) {
         return(NULL)
@@ -1267,11 +1267,11 @@ PerformanceMeasures <- R6::R6Class(
       (annual_return - risk_free_rate) / volatility
     },
 
-    #' Calculates the Sortino ratio of a run of returns.
-    #' @param returns A numeric vector of returns.
-    #' @param risk_free_rate The numeric annual risk-free rate as a fraction.
-    #' @param periods_per_year The numeric number of candles in a trading year.
-    #' @return The numeric Sortino ratio, or `NULL` when there are fewer than two returns or none fell short of the risk-free rate.
+    # Calculates the Sortino ratio of a run of returns.
+    # @param returns A numeric vector of returns.
+    # @param risk_free_rate The numeric annual risk-free rate as a fraction.
+    # @param periods_per_year The numeric number of candles in a trading year.
+    # @return The numeric Sortino ratio, or `NULL` when there are fewer than two returns or none fell short of the risk-free rate.
     sortino_ratio_of = function(returns, risk_free_rate, periods_per_year) {
       if (length(returns) < 2) {
         return(NULL)
@@ -1286,18 +1286,18 @@ PerformanceMeasures <- R6::R6Class(
       (annual_return - risk_free_rate) / downside_deviation
     },
 
-    #' Finds the worst fall of a run of closes from an earlier peak.
-    #' @param closes A numeric vector of closes in time order.
-    #' @return The numeric worst drawdown as a negative fraction, or zero when the closes never fell.
+    # Finds the worst fall of a run of closes from an earlier peak.
+    # @param closes A numeric vector of closes in time order.
+    # @return The numeric worst drawdown as a negative fraction, or zero when the closes never fell.
     maximum_drawdown_of = function(closes) {
       drawdown <- closes / cummax(closes) - 1
       min(drawdown)
     },
 
-    #' Calculates the Calmar ratio of a run of closes.
-    #' @param closes A numeric vector of at least two closes in time order.
-    #' @param periods_per_year The numeric number of candles in a trading year.
-    #' @return The numeric Calmar ratio, or `NULL` when the closes never fell or the growth rate cannot be calculated.
+    # Calculates the Calmar ratio of a run of closes.
+    # @param closes A numeric vector of at least two closes in time order.
+    # @param periods_per_year The numeric number of candles in a trading year.
+    # @return The numeric Calmar ratio, or `NULL` when the closes never fell or the growth rate cannot be calculated.
     calmar_ratio_of = function(closes, periods_per_year) {
       worst <- private$maximum_drawdown_of(closes)
       if (worst == 0) {
@@ -1310,11 +1310,11 @@ PerformanceMeasures <- R6::R6Class(
       annual_return / abs(worst)
     },
 
-    #' Estimates the one-candle value at risk of a run of returns.
-    #' @param returns A numeric vector of returns.
-    #' @param confidence The numeric confidence level between 0 and 1.
-    #' @param method The character method, `"historical"` or `"parametric"`.
-    #' @return The numeric loss as a positive fraction, or `NULL` when there are fewer than two returns.
+    # Estimates the one-candle value at risk of a run of returns.
+    # @param returns A numeric vector of returns.
+    # @param confidence The numeric confidence level between 0 and 1.
+    # @param method The character method, `"historical"` or `"parametric"`.
+    # @return The numeric loss as a positive fraction, or `NULL` when there are fewer than two returns.
     value_at_risk_of = function(returns, confidence, method) {
       if (length(returns) < 2) {
         return(NULL)
@@ -1332,10 +1332,10 @@ PerformanceMeasures <- R6::R6Class(
       -(mean(returns) + standard_score * stats::sd(returns))
     },
 
-    #' Calculates the average loss beyond the historical value at risk of a run of returns.
-    #' @param returns A numeric vector of returns.
-    #' @param confidence The numeric confidence level between 0 and 1.
-    #' @return The numeric average loss as a positive fraction, or `NULL` when there are fewer than two returns.
+    # Calculates the average loss beyond the historical value at risk of a run of returns.
+    # @param returns A numeric vector of returns.
+    # @param confidence The numeric confidence level between 0 and 1.
+    # @return The numeric average loss as a positive fraction, or `NULL` when there are fewer than two returns.
     expected_shortfall_of = function(returns, confidence) {
       value_at_risk <- private$value_at_risk_of(
         returns,
@@ -1349,9 +1349,9 @@ PerformanceMeasures <- R6::R6Class(
       -mean(tail)
     },
 
-    #' Calculates the regression beta of matched returns.
-    #' @param matched A `data.frame` with numeric `returns` and `benchmark_returns` columns.
-    #' @return The numeric beta, or `NULL` when the benchmark's returns never varied.
+    # Calculates the regression beta of matched returns.
+    # @param matched A `data.frame` with numeric `returns` and `benchmark_returns` columns.
+    # @return The numeric beta, or `NULL` when the benchmark's returns never varied.
     beta_of = function(matched) {
       benchmark_variance <- stats::var(matched$benchmark_returns)
       if (benchmark_variance == 0) {
@@ -1361,11 +1361,11 @@ PerformanceMeasures <- R6::R6Class(
       covariance / benchmark_variance
     },
 
-    #' Calculates Jensen's alpha of matched returns.
-    #' @param matched A `data.frame` with numeric `returns` and `benchmark_returns` columns.
-    #' @param risk_free_rate The numeric annual risk-free rate as a fraction.
-    #' @param periods_per_year The numeric number of candles in a trading year.
-    #' @return The numeric annual alpha, or `NULL` when the benchmark's returns never varied.
+    # Calculates Jensen's alpha of matched returns.
+    # @param matched A `data.frame` with numeric `returns` and `benchmark_returns` columns.
+    # @param risk_free_rate The numeric annual risk-free rate as a fraction.
+    # @param periods_per_year The numeric number of candles in a trading year.
+    # @return The numeric annual alpha, or `NULL` when the benchmark's returns never varied.
     alpha_of = function(matched, risk_free_rate, periods_per_year) {
       beta <- private$beta_of(matched)
       if (is.null(beta)) {
@@ -1379,19 +1379,19 @@ PerformanceMeasures <- R6::R6Class(
       annual_return - expected
     },
 
-    #' Calculates the annual tracking error of matched returns.
-    #' @param matched A `data.frame` with numeric `returns` and `benchmark_returns` columns.
-    #' @param periods_per_year The numeric number of candles in a trading year.
-    #' @return The numeric annual tracking error.
+    # Calculates the annual tracking error of matched returns.
+    # @param matched A `data.frame` with numeric `returns` and `benchmark_returns` columns.
+    # @param periods_per_year The numeric number of candles in a trading year.
+    # @return The numeric annual tracking error.
     tracking_error_of = function(matched, periods_per_year) {
       difference <- matched$returns - matched$benchmark_returns
       stats::sd(difference) * sqrt(periods_per_year)
     },
 
-    #' Calculates the information ratio of matched returns.
-    #' @param matched A `data.frame` with numeric `returns` and `benchmark_returns` columns.
-    #' @param periods_per_year The numeric number of candles in a trading year.
-    #' @return The numeric information ratio, or `NULL` when the returns never differed from the benchmark's.
+    # Calculates the information ratio of matched returns.
+    # @param matched A `data.frame` with numeric `returns` and `benchmark_returns` columns.
+    # @param periods_per_year The numeric number of candles in a trading year.
+    # @return The numeric information ratio, or `NULL` when the returns never differed from the benchmark's.
     information_ratio_of = function(matched, periods_per_year) {
       tracking_error <- private$tracking_error_of(matched, periods_per_year)
       if (tracking_error == 0) {
@@ -1401,10 +1401,10 @@ PerformanceMeasures <- R6::R6Class(
       mean(difference) * periods_per_year / tracking_error
     },
 
-    #' Calculates the up or down capture ratio of matched returns.
-    #' @param matched A `data.frame` with numeric `returns` and `benchmark_returns` columns.
-    #' @param rising A logical that is `TRUE` for the candles where the benchmark rose and `FALSE` for those where it fell.
-    #' @return The numeric capture ratio, or `NULL` when the benchmark had no such candle.
+    # Calculates the up or down capture ratio of matched returns.
+    # @param matched A `data.frame` with numeric `returns` and `benchmark_returns` columns.
+    # @param rising A logical that is `TRUE` for the candles where the benchmark rose and `FALSE` for those where it fell.
+    # @return The numeric capture ratio, or `NULL` when the benchmark had no such candle.
     capture_ratio_of = function(matched, rising) {
       if (rising) {
         chosen <- matched[matched$benchmark_returns > 0, ]

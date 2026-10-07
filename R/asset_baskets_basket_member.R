@@ -154,9 +154,9 @@ BasketMember <- R6::R6Class(
     }
   ),
   private = list(
-    #' Writes a number the way Python's `repr` writes it, so a whole double reads `25000.0` and an integer reads `25000`.
-    #' @param value A numeric or integer scalar.
-    #' @return A character value.
+    # Writes a number the way Python's `repr` writes it, so a whole double reads `25000.0` and an integer reads `25000`.
+    # @param value A numeric or integer scalar.
+    # @return A character value.
     python_number_text = function(value) {
       if (is.integer(value)) {
         return(as.character(value))

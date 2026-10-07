@@ -92,21 +92,21 @@ BacktestPlot <- R6::R6Class(
     }
   ),
   private = list(
-    #' Escapes the characters HTML gives a meaning to.
-    #' @param text A character vector.
-    #' @return The character vector with `&`, `<` and `>` escaped.
+    # Escapes the characters HTML gives a meaning to.
+    # @param text A character vector.
+    # @return The character vector with `&`, `<` and `>` escaped.
     escape = function(text) {
       text <- gsub("&", "&amp;", text, fixed = TRUE)
       text <- gsub("<", "&lt;", text, fixed = TRUE)
       gsub(">", "&gt;", text, fixed = TRUE)
     },
 
-    #' Draws a line chart as inline SVG, with optional entry and exit marks.
-    #' @param values A numeric vector, one value per candle.
-    #' @param label A character label for the chart.
-    #' @param entry_bars An integer vector of candle numbers to mark as entries.
-    #' @param exit_bars An integer vector of candle numbers to mark as exits.
-    #' @return A character value holding the `<svg>` element.
+    # Draws a line chart as inline SVG, with optional entry and exit marks.
+    # @param values A numeric vector, one value per candle.
+    # @param label A character label for the chart.
+    # @param entry_bars An integer vector of candle numbers to mark as entries.
+    # @param exit_bars An integer vector of candle numbers to mark as exits.
+    # @return A character value holding the `<svg>` element.
     line_chart = function(values, label, entry_bars, exit_bars) {
       width <- 900
       height <- 260
@@ -171,8 +171,8 @@ BacktestPlot <- R6::R6Class(
       paste(parts, collapse = "\n")
     },
 
-    #' Lays out the statistics, without the strategy, equity curve and trades, as an HTML table.
-    #' @return A character value holding the `<table>` element.
+    # Lays out the statistics, without the strategy, equity curve and trades, as an HTML table.
+    # @return A character value holding the `<table>` element.
     statistics_table = function() {
       rows <- c()
       for (name in names(self$results)) {
@@ -204,9 +204,9 @@ BacktestPlot <- R6::R6Class(
       )
     },
 
-    #' Lays out the trades as an HTML table.
-    #' @param trades The `data.frame` of trades from the statistics.
-    #' @return A character value holding the `<table>` element.
+    # Lays out the trades as an HTML table.
+    # @param trades The `data.frame` of trades from the statistics.
+    # @return A character value holding the `<table>` element.
     trades_table = function(trades) {
       columns <- c(
         "Size",

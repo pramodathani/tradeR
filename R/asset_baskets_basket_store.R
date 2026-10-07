@@ -579,11 +579,11 @@ BasketStore <- R6::R6Class(
     resolver = NULL,
     mongo_collection = NULL,
 
-    #' Finds the latest stored version matching a query that is in effect on a day.
-    #' @param query A named list MongoDB query, such as one on `name` or `linked_instrument_id`.
-    #' @param as_of The day as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL` for today.
-    #' @return The named list document, or `NULL` when no matching version is in effect on that day.
-    #' @details Errors: signals a plain error from mongolite when MongoDB could not be reached.
+    # Finds the latest stored version matching a query that is in effect on a day.
+    # @param query A named list MongoDB query, such as one on `name` or `linked_instrument_id`.
+    # @param as_of The day as a `Date` or a `"YYYY-MM-DD"` character value, or `NULL` for today.
+    # @return The named list document, or `NULL` when no matching version is in effect on that day.
+    # @details Errors: signals a plain error from mongolite when MongoDB could not be reached.
     find_document = function(query, as_of) {
       dated_query <- query
       dated_query[["effective_date"]] <- list(
@@ -601,9 +601,9 @@ BasketStore <- R6::R6Class(
       iterator$one()
     },
 
-    #' Gives the baskets collection, connecting to MongoDB on first use unless a collection was given.
-    #' @return The collection object, a `mongolite::mongo()` connection unless one was given to the constructor.
-    #' @details Errors: signals `ValueError` when the project's MongoDB database name is not configured, and a plain error from mongolite when MongoDB could not be reached.
+    # Gives the baskets collection, connecting to MongoDB on first use unless a collection was given.
+    # @return The collection object, a `mongolite::mongo()` connection unless one was given to the constructor.
+    # @details Errors: signals `ValueError` when the project's MongoDB database name is not configured, and a plain error from mongolite when MongoDB could not be reached.
     collection = function() {
       if (!is.null(private$mongo_collection)) {
         return(private$mongo_collection)
@@ -623,8 +623,8 @@ BasketStore <- R6::R6Class(
       private$mongo_collection
     },
 
-    #' Builds the `createIndexes` command that makes the two indexes Python's `create_index` calls make, under the same names.
-    #' @return A character JSON command.
+    # Builds the `createIndexes` command that makes the two indexes Python's `create_index` calls make, under the same names.
+    # @return A character JSON command.
     create_indexes_command = function() {
       command <- list(
         createIndexes = ASSET_BASKETS_COLLECTION_NAME,
@@ -648,9 +648,9 @@ BasketStore <- R6::R6Class(
       private$json_text(command)
     },
 
-    #' Writes a named list as the extended JSON mongolite reads, with doubles kept as doubles and a `POSIXct` as a MongoDB date.
-    #' @param value A named list, possibly empty.
-    #' @return A character JSON object, `"{}"` for an empty list.
+    # Writes a named list as the extended JSON mongolite reads, with doubles kept as doubles and a `POSIXct` as a MongoDB date.
+    # @param value A named list, possibly empty.
+    # @return A character JSON object, `"{}"` for an empty list.
     json_text = function(value) {
       if (length(value) == 0) {
         return("{}")
@@ -668,9 +668,9 @@ BasketStore <- R6::R6Class(
       )
     },
 
-    #' Marks every single `POSIXct` value in a nested list as a scalar, so it is written as `{"$date": ...}` rather than inside an array.
-    #' @param value Any value.
-    #' @return The value with each single `POSIXct` wrapped by `jsonlite::unbox()`.
+    # Marks every single `POSIXct` value in a nested list as a scalar, so it is written as `{"$date": ...}` rather than inside an array.
+    # @param value Any value.
+    # @return The value with each single `POSIXct` wrapped by `jsonlite::unbox()`.
     unboxed_dates = function(value) {
       if (inherits(value, "POSIXct") && length(value) == 1) {
         return(jsonlite::unbox(value))
@@ -686,9 +686,9 @@ BasketStore <- R6::R6Class(
       value
     },
 
-    #' Turns a day into the `YYYY-MM-DD` form the documents store, defaulting to today.
-    #' @param value A `Date`, a `"YYYY-MM-DD"` character value, or `NULL` for today.
-    #' @return The character date in `YYYY-MM-DD` form.
+    # Turns a day into the `YYYY-MM-DD` form the documents store, defaulting to today.
+    # @param value A `Date`, a `"YYYY-MM-DD"` character value, or `NULL` for today.
+    # @return The character date in `YYYY-MM-DD` form.
     date_text = function(value) {
       if (is.null(value)) {
         return(format(Sys.Date(), "%Y-%m-%d"))
@@ -699,9 +699,9 @@ BasketStore <- R6::R6Class(
       value
     },
 
-    #' Tells whether a stored value counts as given, the way Python's truth test does for the `or` defaults.
-    #' @param value A stored value or `NULL`.
-    #' @return A logical that is `FALSE` for `NULL`, `NA`, an empty string, zero and `FALSE`, and `TRUE` otherwise.
+    # Tells whether a stored value counts as given, the way Python's truth test does for the `or` defaults.
+    # @param value A stored value or `NULL`.
+    # @return A logical that is `FALSE` for `NULL`, `NA`, an empty string, zero and `FALSE`, and `TRUE` otherwise.
     is_given = function(value) {
       if (is.null(value) || length(value) == 0) {
         return(FALSE)
@@ -718,9 +718,9 @@ BasketStore <- R6::R6Class(
       TRUE
     },
 
-    #' Turns a stored text value into one cell of a character column.
-    #' @param value A character value or `NULL`.
-    #' @return The character value, or `NA` when `value` is `NULL`.
+    # Turns a stored text value into one cell of a character column.
+    # @param value A character value or `NULL`.
+    # @return The character value, or `NA` when `value` is `NULL`.
     text_or_missing = function(value) {
       if (is.null(value)) {
         return(NA_character_)

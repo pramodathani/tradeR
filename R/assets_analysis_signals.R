@@ -145,13 +145,13 @@ Signals <- R6::R6Class(
     }
   ),
   private = list(
-    #' @description
-    #' Checks that a frame has both columns a crossing test compares.
-    #' @param data The `data.frame` to check.
-    #' @param first_column The character name of the first column.
-    #' @param second_column The character name of the second column.
-    #' @return `NULL`, invisibly, when both columns are present.
-    #' @details Errors: signals a plain error naming the first column that `data` lacks, where Python raises `KeyError`.
+    # @description
+    # Checks that a frame has both columns a crossing test compares.
+    # @param data The `data.frame` to check.
+    # @param first_column The character name of the first column.
+    # @param second_column The character name of the second column.
+    # @return `NULL`, invisibly, when both columns are present.
+    # @details Errors: signals a plain error naming the first column that `data` lacks, where Python raises `KeyError`.
     check_columns = function(data, first_column, second_column) {
       columns <- c(
         first_column,
@@ -168,10 +168,10 @@ Signals <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' @description
-    #' Shifts a vector down by one place, as pandas `shift()` does.
-    #' @param values A vector, such as a numeric column.
-    #' @return A vector of the same length whose first element is `NA` and whose other elements are the elements of `values` before them.
+    # @description
+    # Shifts a vector down by one place, as pandas `shift()` does.
+    # @param values A vector, such as a numeric column.
+    # @return A vector of the same length whose first element is `NA` and whose other elements are the elements of `values` before them.
     previous_values = function(values) {
       count <- length(values)
       previous <- rep(NA, count)

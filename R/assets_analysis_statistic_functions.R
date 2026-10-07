@@ -512,19 +512,19 @@ StatisticFunctions <- R6::R6Class(
     }
   ),
   private = list(
-    #' @description
-    #' Fetches the instrument's candles with a benchmark's column matched to them by time.
-    #'
-    #' Each candle of the instrument is kept, in its own order, when the benchmark has a candle at the same moment, as a pandas inner merge on `datetime` does.
-    #' @param benchmark The object with a `prices()` method whose column is matched in.
-    #' @param column The character name of the candle column taken from the benchmark.
-    #' @param interval The character candle interval, such as `day` or `5minute`.
-    #' @param from_date The first day of the range as a `Date` or a `YYYY-MM-DD` character, or `NULL` when days is given.
-    #' @param to_date The last day of the range as a `Date` or a `YYYY-MM-DD` character, or `NULL` when days is given.
-    #' @param days The integer number of days to count back from today, or `NULL` when from_date and to_date are given.
-    #' @param adjusted A logical that is `TRUE` for prices adjusted for splits and bonuses.
-    #' @return A `data.frame` of the instrument's candles that have a benchmark candle at the same time, with an added `benchmark_<column>` column, or `NULL` when either has no candles in the range.
-    #' @details Errors: signals `UnifiedBrokerInterfaceError` when UBI refused the request or could not be reached.
+    # @description
+    # Fetches the instrument's candles with a benchmark's column matched to them by time.
+    #
+    # Each candle of the instrument is kept, in its own order, when the benchmark has a candle at the same moment, as a pandas inner merge on `datetime` does.
+    # @param benchmark The object with a `prices()` method whose column is matched in.
+    # @param column The character name of the candle column taken from the benchmark.
+    # @param interval The character candle interval, such as `day` or `5minute`.
+    # @param from_date The first day of the range as a `Date` or a `YYYY-MM-DD` character, or `NULL` when days is given.
+    # @param to_date The last day of the range as a `Date` or a `YYYY-MM-DD` character, or `NULL` when days is given.
+    # @param days The integer number of days to count back from today, or `NULL` when from_date and to_date are given.
+    # @param adjusted A logical that is `TRUE` for prices adjusted for splits and bonuses.
+    # @return A `data.frame` of the instrument's candles that have a benchmark candle at the same time, with an added `benchmark_<column>` column, or `NULL` when either has no candles in the range.
+    # @details Errors: signals `UnifiedBrokerInterfaceError` when UBI refused the request or could not be reached.
     prices_with_benchmark = function(
       benchmark,
       column,
@@ -570,10 +570,10 @@ StatisticFunctions <- R6::R6Class(
       matched
     },
 
-    #' @description
-    #' Calculates the fractional change from each value to the next, as pandas `pct_change()` does.
-    #' @param values A numeric vector.
-    #' @return A numeric vector of the same length, whose first element is `NA` and whose other elements are each value divided by the one before, minus 1.
+    # @description
+    # Calculates the fractional change from each value to the next, as pandas `pct_change()` does.
+    # @param values A numeric vector.
+    # @return A numeric vector of the same length, whose first element is `NA` and whose other elements are each value divided by the one before, minus 1.
     fractional_changes = function(values) {
       values <- as.numeric(values)
       count <- length(values)
@@ -587,12 +587,12 @@ StatisticFunctions <- R6::R6Class(
       changes
     },
 
-    #' @description
-    #' Finds the first row at which every one of several equally long vectors has a value.
-    #'
-    #' Python's `talib` skips missing values at the start of its inputs before calling TA-Lib and reports them as missing, and this position is where that skipping stops.
-    #' @param columns A list of numeric vectors of the same length.
-    #' @return The integer position of the first row with no `NA` in any vector, or one more than the length when there is none.
+    # @description
+    # Finds the first row at which every one of several equally long vectors has a value.
+    #
+    # Python's `talib` skips missing values at the start of its inputs before calling TA-Lib and reports them as missing, and this position is where that skipping stops.
+    # @param columns A list of numeric vectors of the same length.
+    # @return The integer position of the first row with no `NA` in any vector, or one more than the length when there is none.
     first_complete_position = function(columns) {
       count <- length(columns[[1]])
       position <- 1
@@ -611,15 +611,15 @@ StatisticFunctions <- R6::R6Class(
       position
     },
 
-    #' @description
-    #' Calculates TA-Lib's rolling Pearson correlation of two numeric vectors.
-    #'
-    #' This follows TA-Lib 0.6.4's `TA_CORREL`, the version Python's `talib` uses, with its running sums, so a missing value inside the data makes every later value missing, as in Python. The `talib` package's `CORREL` is a newer rewrite that differs in the last digits and turns such values into 0. As the Python wrapper does, rows at the start where either vector is missing are skipped, and the first `window - 1` values after them are `NA`.
-    #' @param first_values A numeric vector.
-    #' @param second_values A numeric vector of the same length.
-    #' @param window The integer number of values in each window.
-    #' @return A numeric vector the length of `first_values`, between -1 and 1, and 0 where either vector does not vary over the window.
-    #' @details Errors: signals a plain error when `window` is below 1 or above 100000.
+    # @description
+    # Calculates TA-Lib's rolling Pearson correlation of two numeric vectors.
+    #
+    # This follows TA-Lib 0.6.4's `TA_CORREL`, the version Python's `talib` uses, with its running sums, so a missing value inside the data makes every later value missing, as in Python. The `talib` package's `CORREL` is a newer rewrite that differs in the last digits and turns such values into 0. As the Python wrapper does, rows at the start where either vector is missing are skipped, and the first `window - 1` values after them are `NA`.
+    # @param first_values A numeric vector.
+    # @param second_values A numeric vector of the same length.
+    # @param window The integer number of values in each window.
+    # @return A numeric vector the length of `first_values`, between -1 and 1, and 0 where either vector does not vary over the window.
+    # @details Errors: signals a plain error when `window` is below 1 or above 100000.
     rolling_correlation = function(first_values, second_values, window) {
       if (window < 1 || window > 100000) {
         stop(
@@ -687,15 +687,15 @@ StatisticFunctions <- R6::R6Class(
       correlations
     },
 
-    #' @description
-    #' Calculates TA-Lib's rolling linear regression lines through a numeric vector.
-    #'
-    #' This follows TA-Lib 0.6.4's `TA_LINEARREG` family exactly, including the order of its sums, so the values match Python's `talib` to the last bit. As the Python wrapper does, missing values at the start are skipped, and the first `window - 1` values after them are `NA`.
-    #' @param values A numeric vector, such as a candle column.
-    #' @param window The integer number of values in each regression window.
-    #' @param function_name The character name of the TA-Lib function being imitated, such as `"TA_LINEARREG"`, used in the error message.
-    #' @return A named list of four numeric vectors the length of `values`: `end_value`, the line's value at the newest point, `slope`, `intercept`, the line's value at the oldest point, and `angle`, the slope's angle in degrees.
-    #' @details Errors: signals a plain error when `window` is below 2 or above 100000.
+    # @description
+    # Calculates TA-Lib's rolling linear regression lines through a numeric vector.
+    #
+    # This follows TA-Lib 0.6.4's `TA_LINEARREG` family exactly, including the order of its sums, so the values match Python's `talib` to the last bit. As the Python wrapper does, missing values at the start are skipped, and the first `window - 1` values after them are `NA`.
+    # @param values A numeric vector, such as a candle column.
+    # @param window The integer number of values in each regression window.
+    # @param function_name The character name of the TA-Lib function being imitated, such as `"TA_LINEARREG"`, used in the error message.
+    # @return A named list of four numeric vectors the length of `values`: `end_value`, the line's value at the newest point, `slope`, `intercept`, the line's value at the oldest point, and `angle`, the slope's angle in degrees.
+    # @details Errors: signals a plain error when `window` is below 2 or above 100000.
     regression_lines = function(values, window, function_name) {
       if (window < 2 || window > 100000) {
         stop(

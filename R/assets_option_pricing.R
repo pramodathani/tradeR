@@ -72,35 +72,35 @@ OptionPricingModel <- R6::R6Class(
     }
   ),
   private = list(
-    #' Makes a copy of this model with another volatility.
-    #' @param volatility The numeric annual volatility for the copy.
-    #' @return A new model object of the same class.
+    # Makes a copy of this model with another volatility.
+    # @param volatility The numeric annual volatility for the copy.
+    # @return A new model object of the same class.
     with_volatility = function(volatility) {
       copy <- self$clone()
       copy$volatility <- volatility
       copy
     },
 
-    #' Works out the standard normal distribution's cumulative probability at a value.
-    #' @param value The numeric point to evaluate at.
-    #' @return The numeric probability that a standard normal variable is at most `value`.
+    # Works out the standard normal distribution's cumulative probability at a value.
+    # @param value The numeric point to evaluate at.
+    # @return The numeric probability that a standard normal variable is at most `value`.
     normal_cumulative = function(value) {
       stats::pnorm(value)
     },
 
-    #' Works out the standard normal distribution's density at a value.
-    #' @param value The numeric point to evaluate at.
-    #' @return The numeric density.
+    # Works out the standard normal distribution's density at a value.
+    # @param value The numeric point to evaluate at.
+    # @return The numeric density.
     normal_density = function(value) {
       exp(-value * value / 2) / sqrt(2 * pi)
     },
 
-    #' Signals `ValueError` unless a model input is above zero.
-    #' @param value The numeric input.
-    #' @param description The character description used in the message, such as `"The strike price"`.
-    #' @param name The character argument name shown in the message.
-    #' @return `NULL`, invisibly.
-    #' @details Errors: signals `ValueError` when `value` is not above zero.
+    # Signals `ValueError` unless a model input is above zero.
+    # @param value The numeric input.
+    # @param description The character description used in the message, such as `"The strike price"`.
+    # @param name The character argument name shown in the message.
+    # @return `NULL`, invisibly.
+    # @details Errors: signals `ValueError` when `value` is not above zero.
     require_positive = function(value, description, name) {
       if (value <= 0) {
         ErrorCatalogue$raise(
@@ -288,8 +288,8 @@ BlackScholes <- R6::R6Class(
     }
   ),
   private = list(
-    #' Works out the model's d1, the standardised distance of the underlying from the strike.
-    #' @return The numeric d1.
+    # Works out the model's d1, the standardised distance of the underlying from the strike.
+    # @return The numeric d1.
     first_distance = function() {
       spread <- self$volatility * sqrt(self$years_to_expiry)
       drift <- (self$risk_free_rate + self$volatility * self$volatility / 2) *
@@ -297,15 +297,15 @@ BlackScholes <- R6::R6Class(
       (log(self$underlying_price / self$strike_price) + drift) / spread
     },
 
-    #' Works out the model's d2, which is d1 less the volatility over the option's life.
-    #' @return The numeric d2.
+    # Works out the model's d2, which is d1 less the volatility over the option's life.
+    # @return The numeric d2.
     second_distance = function() {
       spread <- self$volatility * sqrt(self$years_to_expiry)
       private$first_distance() - spread
     },
 
-    #' Works out the strike price discounted back from expiry to today.
-    #' @return The numeric discounted strike price.
+    # Works out the strike price discounted back from expiry to today.
+    # @return The numeric discounted strike price.
     discounted_strike = function() {
       discount <- exp(-self$risk_free_rate * self$years_to_expiry)
       self$strike_price * discount
@@ -486,23 +486,23 @@ Black76 <- R6::R6Class(
     }
   ),
   private = list(
-    #' Works out the model's d1, the standardised distance of the forward from the strike.
-    #' @return The numeric d1.
+    # Works out the model's d1, the standardised distance of the forward from the strike.
+    # @return The numeric d1.
     first_distance = function() {
       spread <- self$volatility * sqrt(self$years_to_expiry)
       drift <- self$volatility * self$volatility / 2 * self$years_to_expiry
       (log(self$forward_price / self$strike_price) + drift) / spread
     },
 
-    #' Works out the model's d2, which is d1 less the volatility over the option's life.
-    #' @return The numeric d2.
+    # Works out the model's d2, which is d1 less the volatility over the option's life.
+    # @return The numeric d2.
     second_distance = function() {
       spread <- self$volatility * sqrt(self$years_to_expiry)
       private$first_distance() - spread
     },
 
-    #' Works out the factor that brings a payment at expiry back to today.
-    #' @return The numeric discount factor.
+    # Works out the factor that brings a payment at expiry back to today.
+    # @return The numeric discount factor.
     discount = function() {
       exp(-self$risk_free_rate * self$years_to_expiry)
     }

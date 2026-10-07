@@ -655,15 +655,15 @@ Portfolio <- R6::R6Class(
     }
   ),
   private = list(
-    #' Sends planned market orders in one list request and tabulates UBI's answer.
-    #' @param planned A list of named lists, each with `label`, `instrument_id`, `transaction_type` and a positive `quantity`.
-    #' @param product The character product every order is sent with.
-    #' @param validity The character validity of every order.
-    #' @param tag A character tag to put on every order, or `NULL`.
-    #' @param dry_run A logical that is `TRUE` to have UBI build every order without sending it.
-    #' @param as_marketable_limit A logical that is `TRUE` to let UBI's order engine send each order as a marketable limit, and `FALSE` to send market orders at once.
-    #' @return A `data.frame` with one row per planned order, holding `label`, `instrument_id`, `transaction_type`, `quantity`, `status`, `broker`, `outcome`, `order_id`, `parent_id`, `intent_id` and `error`, which has no rows when nothing was planned.
-    #' @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when UBI refused the whole list or could not be reached.
+    # Sends planned market orders in one list request and tabulates UBI's answer.
+    # @param planned A list of named lists, each with `label`, `instrument_id`, `transaction_type` and a positive `quantity`.
+    # @param product The character product every order is sent with.
+    # @param validity The character validity of every order.
+    # @param tag A character tag to put on every order, or `NULL`.
+    # @param dry_run A logical that is `TRUE` to have UBI build every order without sending it.
+    # @param as_marketable_limit A logical that is `TRUE` to let UBI's order engine send each order as a marketable limit, and `FALSE` to send market orders at once.
+    # @return A `data.frame` with one row per planned order, holding `label`, `instrument_id`, `transaction_type`, `quantity`, `status`, `broker`, `outcome`, `order_id`, `parent_id`, `intent_id` and `error`, which has no rows when nothing was planned.
+    # @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when UBI refused the whole list or could not be reached.
     send_orders = function(
       planned,
       product,
@@ -738,8 +738,8 @@ Portfolio <- R6::R6Class(
       FrameBuilder$new()$frame(rows)
     },
 
-    #' Builds the answer table of `place_orders()` with no rows.
-    #' @return A `data.frame` with the eleven order result columns and no rows.
+    # Builds the answer table of `place_orders()` with no rows.
+    # @return A `data.frame` with the eleven order result columns and no rows.
     empty_order_frame = function() {
       data.frame(
         label = character(0),
@@ -756,8 +756,8 @@ Portfolio <- R6::R6Class(
       )
     },
 
-    #' Builds the table of `rebalance_trades()` with no rows.
-    #' @return A `data.frame` with the seven trade columns and no rows.
+    # Builds the table of `rebalance_trades()` with no rows.
+    # @return A `data.frame` with the seven trade columns and no rows.
     empty_rebalance_frame = function() {
       data.frame(
         label = character(0),
@@ -770,16 +770,16 @@ Portfolio <- R6::R6Class(
       )
     },
 
-    #' Uses the quantities held for the portfolio's candles, so they show what the holdings were worth.
-    #' @param first_closes A named numeric vector of each member's close at the first shared candle, named by member label, which only fixes the order here.
-    #' @return A named numeric vector of quantities, named by member label.
+    # Uses the quantities held for the portfolio's candles, so they show what the holdings were worth.
+    # @param first_closes A named numeric vector of each member's close at the first shared candle, named by member label, which only fixes the order here.
+    # @return A named numeric vector of quantities, named by member label.
     candle_quantities = function(first_closes) {
       self$quantities[names(first_closes)]
     },
 
-    #' Gives the other side of a trade.
-    #' @param transaction_type The character side, `"buy"` or `"sell"`.
-    #' @return The character `"sell"` for `"buy"`, and `"buy"` for anything else.
+    # Gives the other side of a trade.
+    # @param transaction_type The character side, `"buy"` or `"sell"`.
+    # @return The character `"sell"` for `"buy"`, and `"buy"` for anything else.
     opposite_side = function(transaction_type) {
       if (transaction_type == ASSET_BASKETS_BUY) {
         return(ASSET_BASKETS_SELL)
@@ -787,16 +787,16 @@ Portfolio <- R6::R6Class(
       ASSET_BASKETS_BUY
     },
 
-    #' Rounds a quantity towards zero to a whole number of units.
-    #' @param quantity The numeric quantity, negative for a short position.
-    #' @return The numeric whole quantity, with the same sign.
+    # Rounds a quantity towards zero to a whole number of units.
+    # @param quantity The numeric quantity, negative for a short position.
+    # @return The numeric whole quantity, with the same sign.
     whole_units = function(quantity) {
       as.numeric(trunc(quantity))
     },
 
-    #' Turns a whole numeric quantity into an integer, so it reaches UBI as a whole number.
-    #' @param quantity The integer or numeric quantity.
-    #' @return The integer quantity when it is whole and fits in an integer, or the numeric as given otherwise.
+    # Turns a whole numeric quantity into an integer, so it reaches UBI as a whole number.
+    # @param quantity The integer or numeric quantity.
+    # @return The integer quantity when it is whole and fits in an integer, or the numeric as given otherwise.
     plain_number = function(quantity) {
       if (is.numeric(quantity) && is.finite(quantity) &&
             quantity == round(quantity) &&

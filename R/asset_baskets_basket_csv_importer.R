@@ -199,10 +199,10 @@ BasketCsvImporter <- R6::R6Class(
     }
   ),
   private = list(
-    #' Reads a CSV file as text, the way pandas reads it with `dtype=str` and `skipinitialspace=True`.
-    #' @param path The character path of the CSV file.
-    #' @return A `data.frame` of character columns with lower-case, stripped column names, where a cell pandas reads as missing is `NA`.
-    #' @details Errors: signals a plain error when the file cannot be read.
+    # Reads a CSV file as text, the way pandas reads it with `dtype=str` and `skipinitialspace=True`.
+    # @param path The character path of the CSV file.
+    # @return A `data.frame` of character columns with lower-case, stripped column names, where a cell pandas reads as missing is `NA`.
+    # @details Errors: signals a plain error when the file cannot be read.
     read_file = function(path) {
       frame <- utils::read.csv(
         path,
@@ -221,13 +221,13 @@ BasketCsvImporter <- R6::R6Class(
       frame
     },
 
-    #' Turns the CSV's rows into rows that name instruments.
-    #' @param frame The `data.frame` read from the file, with lower-case column names and every value as text.
-    #' @param exchange The character exchange of any row that does not give one.
-    #' @param segment The character segment of any row that does not give one.
-    #' @param path The character path of the file, for error messages.
-    #' @return A list of named lists, one per row with a symbol or an instrument id, each with `instrument_id` when the file gives one, then `symbol`, `exchange`, `segment`, `weight` and `quantity`, the last two numeric or `NULL`.
-    #' @details Errors: signals `BasketCsvImportError` when the file has no rows, or gives a weight or quantity to only some rows; and `ValueError` when a weight or quantity is not a number.
+    # Turns the CSV's rows into rows that name instruments.
+    # @param frame The `data.frame` read from the file, with lower-case column names and every value as text.
+    # @param exchange The character exchange of any row that does not give one.
+    # @param segment The character segment of any row that does not give one.
+    # @param path The character path of the file, for error messages.
+    # @return A list of named lists, one per row with a symbol or an instrument id, each with `instrument_id` when the file gives one, then `symbol`, `exchange`, `segment`, `weight` and `quantity`, the last two numeric or `NULL`.
+    # @details Errors: signals `BasketCsvImportError` when the file has no rows, or gives a weight or quantity to only some rows; and `ValueError` when a weight or quantity is not a number.
     rows_from = function(frame, exchange, segment, path) {
       rows <- list()
       for (row_index in seq_len(nrow(frame))) {
@@ -294,11 +294,11 @@ BasketCsvImporter <- R6::R6Class(
       rows
     },
 
-    #' Reads one cell of the file, treating a column the file lacks as an empty cell.
-    #' @param frame The `data.frame` read from the file.
-    #' @param column The character column name.
-    #' @param row_index The integer row number.
-    #' @return The character cell, or `NA` when the column is missing or the cell is empty.
+    # Reads one cell of the file, treating a column the file lacks as an empty cell.
+    # @param frame The `data.frame` read from the file.
+    # @param column The character column name.
+    # @param row_index The integer row number.
+    # @return The character cell, or `NA` when the column is missing or the cell is empty.
     cell = function(frame, column, row_index) {
       if (!(column %in% names(frame))) {
         return(NA_character_)
@@ -306,9 +306,9 @@ BasketCsvImporter <- R6::R6Class(
       frame[[column]][[row_index]]
     },
 
-    #' Cleans one CSV value, treating an empty cell as missing.
-    #' @param value The cell's value, a character value or `NA`.
-    #' @return The character value without surrounding spaces, or `NULL` when the cell is empty.
+    # Cleans one CSV value, treating an empty cell as missing.
+    # @param value The cell's value, a character value or `NA`.
+    # @return The character value without surrounding spaces, or `NULL` when the cell is empty.
     text = function(value) {
       if (is.null(value) || is.na(value)) {
         return(NULL)
@@ -320,10 +320,10 @@ BasketCsvImporter <- R6::R6Class(
       cleaned
     },
 
-    #' Reads a weight or quantity, allowing thousands separators and a trailing percent sign.
-    #' @param value The cleaned character cell.
-    #' @return The numeric value.
-    #' @details Errors: signals `ValueError` when the text is not a number.
+    # Reads a weight or quantity, allowing thousands separators and a trailing percent sign.
+    # @param value The cleaned character cell.
+    # @return The numeric value.
+    # @details Errors: signals `ValueError` when the text is not a number.
     number = function(value) {
       cleaned <- gsub(",", "", value, fixed = TRUE)
       cleaned <- sub("%+$", "", cleaned)

@@ -1543,10 +1543,10 @@ AssetBasket <- R6::R6Class(
   private = list(
     unified_broker_interface = NULL,
 
-    #' Checks that members can form a basket.
-    #' @param members The list of `BasketMember` objects to check.
-    #' @return `NULL`, invisibly.
-    #' @details Errors: signals `BasketMemberError` when `members` is empty, names an instrument twice, or gives weights to only some members.
+    # Checks that members can form a basket.
+    # @param members The list of `BasketMember` objects to check.
+    # @return `NULL`, invisibly.
+    # @details Errors: signals `BasketMemberError` when `members` is empty, names an instrument twice, or gives weights to only some members.
     check_members = function(members) {
       if (length(members) == 0) {
         ErrorCatalogue$raise(
@@ -1588,24 +1588,24 @@ AssetBasket <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' Works out the fixed quantity of each member that the basket's candles are built from.
-    #'
-    #' This base version spreads `base_value` across the members by weight at the first candle's closes. A `Portfolio` replaces it with the quantities it holds.
-    #' @param first_closes A named numeric vector of each member's close at the first shared candle, named by member label.
-    #' @return A named numeric vector of quantities, named by member label.
+    # Works out the fixed quantity of each member that the basket's candles are built from.
+    #
+    # This base version spreads `base_value` across the members by weight at the first candle's closes. A `Portfolio` replaces it with the quantities it holds.
+    # @param first_closes A named numeric vector of each member's close at the first shared candle, named by member label.
+    # @return A named numeric vector of quantities, named by member label.
     candle_quantities = function(first_closes) {
       weights <- self$weights[names(first_closes)]
       self$base_value * weights / first_closes
     },
 
-    #' Lines up the members' open, high, low and close by time, keeping only candles every member has.
-    #' @param interval The character candle interval.
-    #' @param from_date The first day of the range as a `Date` or character value, or `NULL`.
-    #' @param to_date The last day of the range as a `Date` or character value, or `NULL`.
-    #' @param days The integer number of days to count back from today, or `NULL`.
-    #' @param adjusted A logical that is `TRUE` for adjusted prices.
-    #' @return A named list with `datetime`, a `POSIXct` vector of the shared candle times in order, and `open`, `high`, `low` and `close`, each a numeric matrix with one row per shared time and one column per member label in member order, or `NULL` when any member has no candles or no candle is shared by all.
-    #' @details Errors: signals `BasketMemberError` when UBI answered an error for one or more members, and another `UnifiedBrokerInterfaceError` subclass for any other failure.
+    # Lines up the members' open, high, low and close by time, keeping only candles every member has.
+    # @param interval The character candle interval.
+    # @param from_date The first day of the range as a `Date` or character value, or `NULL`.
+    # @param to_date The last day of the range as a `Date` or character value, or `NULL`.
+    # @param days The integer number of days to count back from today, or `NULL`.
+    # @param adjusted A logical that is `TRUE` for adjusted prices.
+    # @return A named list with `datetime`, a `POSIXct` vector of the shared candle times in order, and `open`, `high`, `low` and `close`, each a numeric matrix with one row per shared time and one column per member label in member order, or `NULL` when any member has no candles or no candle is shared by all.
+    # @details Errors: signals `BasketMemberError` when UBI answered an error for one or more members, and another `UnifiedBrokerInterfaceError` subclass for any other failure.
     aligned_candles = function(interval, from_date, to_date, days, adjusted) {
       frame <- self$member_prices(interval, from_date, to_date, days, adjusted)
       if (is.null(frame)) {
@@ -1646,10 +1646,10 @@ AssetBasket <- R6::R6Class(
       aligned
     },
 
-    #' Builds a table indexed by time from a matrix with one column per member label.
-    #' @param datetime A `POSIXct` vector, one value per row of `values`.
-    #' @param values A numeric matrix whose column names are member labels.
-    #' @return A `data.frame` with a `datetime` column followed by one column per member label.
+    # Builds a table indexed by time from a matrix with one column per member label.
+    # @param datetime A `POSIXct` vector, one value per row of `values`.
+    # @param values A numeric matrix whose column names are member labels.
+    # @return A `data.frame` with a `datetime` column followed by one column per member label.
     time_frame = function(datetime, values) {
       frame <- data.frame(
         datetime = datetime
@@ -1660,26 +1660,26 @@ AssetBasket <- R6::R6Class(
       frame
     },
 
-    #' Takes the member columns of a table indexed by time as a matrix.
-    #' @param frame A `data.frame` with a `datetime` column followed by one column per member label.
-    #' @return A numeric matrix with one column per member label.
+    # Takes the member columns of a table indexed by time as a matrix.
+    # @param frame A `data.frame` with a `datetime` column followed by one column per member label.
+    # @return A numeric matrix with one column per member label.
     label_matrix = function(frame) {
       values <- as.matrix(frame[, self$labels, drop = FALSE])
       colnames(values) <- self$labels
       values
     },
 
-    #' Turns a square matrix whose row and column names are member labels into a `data.frame`.
-    #' @param values A numeric matrix with member labels as row and column names.
-    #' @return A `data.frame` whose row names and column names are the member labels.
+    # Turns a square matrix whose row and column names are member labels into a `data.frame`.
+    # @param values A numeric matrix with member labels as row and column names.
+    # @return A `data.frame` whose row names and column names are the member labels.
     label_frame = function(values) {
       as.data.frame(values, optional = TRUE)
     },
 
-    #' Reads one row of a table indexed by time as a named vector.
-    #' @param frame A `data.frame` with a `datetime` column followed by one column per member label.
-    #' @param row_index The integer row number.
-    #' @return A named numeric vector, named by member label.
+    # Reads one row of a table indexed by time as a named vector.
+    # @param frame A `data.frame` with a `datetime` column followed by one column per member label.
+    # @param row_index The integer row number.
+    # @return A named numeric vector, named by member label.
     row_values = function(frame, row_index) {
       values <- numeric(0)
       for (label in self$labels) {
@@ -1688,11 +1688,11 @@ AssetBasket <- R6::R6Class(
       values
     },
 
-    #' Picks the members that moved most since the previous close.
-    #' @param count The integer most members to return.
-    #' @param decreasing A logical that is `TRUE` for the biggest rises first and `FALSE` for the biggest falls first.
-    #' @return A `data.frame` of `ohlc` rows without the members that have no quote.
-    #' @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when UBI refused the request or could not be reached.
+    # Picks the members that moved most since the previous close.
+    # @param count The integer most members to return.
+    # @param decreasing A logical that is `TRUE` for the biggest rises first and `FALSE` for the biggest falls first.
+    # @return A `data.frame` of `ohlc` rows without the members that have no quote.
+    # @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when UBI refused the request or could not be reached.
     top_movers = function(count, decreasing) {
       frame <- self$ohlc
       frame <- frame[!is.na(frame$change_percent), , drop = FALSE]
@@ -1703,21 +1703,21 @@ AssetBasket <- R6::R6Class(
       frame
     },
 
-    #' Sends one list request naming every member and returns its entries in member order.
-    #' @param path The character path of a UBI route that takes a list of instruments, such as `"/api/instruments/ltp"`.
-    #' @param shared_parameters A named list of parameters that apply to every member, such as the interval and range for `/api/instruments/prices`, or `NULL`.
-    #' @return A list of named lists, one per member, each with `request_index`, `status` and either `data` or `error`.
-    #' @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when the whole request was refused by, or failed on the way to, UBI.
+    # Sends one list request naming every member and returns its entries in member order.
+    # @param path The character path of a UBI route that takes a list of instruments, such as `"/api/instruments/ltp"`.
+    # @param shared_parameters A named list of parameters that apply to every member, such as the interval and range for `/api/instruments/prices`, or `NULL`.
+    # @return A list of named lists, one per member, each with `request_index`, `status` and either `data` or `error`.
+    # @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when the whole request was refused by, or failed on the way to, UBI.
     post_for_every_member = function(path, shared_parameters = NULL) {
       private$post_for_instruments(path, self$instruments, shared_parameters)
     },
 
-    #' Sends one list request naming the given instruments and returns its entries in the same order.
-    #' @param path The character path of a UBI route that takes a list of instruments.
-    #' @param listed_instruments The list of `Instrument` objects to name, in order.
-    #' @param shared_parameters A named list of parameters that apply to every instrument, or `NULL`.
-    #' @return A list of named lists, one per instrument, each with `request_index`, `status` and either `data` or `error`.
-    #' @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when the whole request was refused by, or failed on the way to, UBI.
+    # Sends one list request naming the given instruments and returns its entries in the same order.
+    # @param path The character path of a UBI route that takes a list of instruments.
+    # @param listed_instruments The list of `Instrument` objects to name, in order.
+    # @param shared_parameters A named list of parameters that apply to every instrument, or `NULL`.
+    # @return A list of named lists, one per instrument, each with `request_index`, `status` and either `data` or `error`.
+    # @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when the whole request was refused by, or failed on the way to, UBI.
     post_for_instruments = function(
       path,
       listed_instruments,
@@ -1747,10 +1747,10 @@ AssetBasket <- R6::R6Class(
       results[order(request_indexes, method = "radix")]
     },
 
-    #' Reads the last price of each of the given instruments in one request.
-    #' @param listed_instruments The list of `Instrument` objects to price.
-    #' @return A named list mapping each character `instrument_id` to its numeric last price.
-    #' @details Errors: signals `BasketMemberError` when UBI had no price for one or more of the instruments, all of which the message lists; and a `UnifiedBrokerInterfaceError` subclass when the whole request was refused by, or failed on the way to, UBI.
+    # Reads the last price of each of the given instruments in one request.
+    # @param listed_instruments The list of `Instrument` objects to price.
+    # @return A named list mapping each character `instrument_id` to its numeric last price.
+    # @details Errors: signals `BasketMemberError` when UBI had no price for one or more of the instruments, all of which the message lists; and a `UnifiedBrokerInterfaceError` subclass when the whole request was refused by, or failed on the way to, UBI.
     last_prices_by_instrument_id = function(listed_instruments) {
       results <- private$post_for_instruments(
         ASSET_BASKETS_LAST_PRICE_PATH,
@@ -1793,10 +1793,10 @@ AssetBasket <- R6::R6Class(
       prices
     },
 
-    #' Signals an error when any entry of a list answer is an error.
-    #' @param results The list of entry named lists from a list answer, in member order.
-    #' @return `NULL`, invisibly.
-    #' @details Errors: signals `BasketMemberError` when one or more entries are errors, all of which the message lists.
+    # Signals an error when any entry of a list answer is an error.
+    # @param results The list of entry named lists from a list answer, in member order.
+    # @return `NULL`, invisibly.
+    # @details Errors: signals `BasketMemberError` when one or more entries are errors, all of which the message lists.
     raise_for_failed_members = function(results) {
       failures <- character(0)
       for (member_index in seq_along(self$members)) {
@@ -1826,9 +1826,9 @@ AssetBasket <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' Adds up the weights of the members sharing each value of an instrument attribute.
-    #' @param attribute The character name of the instrument attribute to group by, `"segment"` or `"exchange"`.
-    #' @return A named numeric vector of total weights, named by attribute value, largest first.
+    # Adds up the weights of the members sharing each value of an instrument attribute.
+    # @param attribute The character name of the instrument attribute to group by, `"segment"` or `"exchange"`.
+    # @return A named numeric vector of total weights, named by attribute value, largest first.
     weights_grouped_by = function(attribute) {
       weights <- self$weights
       totals <- numeric(0)
@@ -1847,12 +1847,12 @@ AssetBasket <- R6::R6Class(
       totals[order(totals, decreasing = TRUE, method = "radix")]
     },
 
-    #' Maps each member of a basket to its weight by instrument id.
-    #'
-    #' Python's `_weights_by_instrument_id` is called on another basket by `overlap_with` and `Portfolio.rebalance_trades`; an R6 object cannot call another object's private method, so this reads the other basket's public `weights` and `members`, which is all the Python method reads.
-    #' @param basket The `AssetBasket` whose weights to map, which may be this basket.
-    #' @return A named list mapping each character `instrument_id` to its numeric weight.
-    #' @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when a basket whose weights come from live prices could not read them.
+    # Maps each member of a basket to its weight by instrument id.
+    #
+    # Python's `_weights_by_instrument_id` is called on another basket by `overlap_with` and `Portfolio.rebalance_trades`; an R6 object cannot call another object's private method, so this reads the other basket's public `weights` and `members`, which is all the Python method reads.
+    # @param basket The `AssetBasket` whose weights to map, which may be this basket.
+    # @return A named list mapping each character `instrument_id` to its numeric weight.
+    # @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when a basket whose weights come from live prices could not read them.
     weights_by_instrument_id_of = function(basket) {
       weights <- basket$weights
       by_instrument_id <- list()
@@ -1864,9 +1864,9 @@ AssetBasket <- R6::R6Class(
       by_instrument_id
     },
 
-    #' Reads the error message of one entry of a list answer.
-    #' @param result One entry named list of a list answer.
-    #' @return The character error message, or `NULL` when the entry succeeded.
+    # Reads the error message of one entry of a list answer.
+    # @param result One entry named list of a list answer.
+    # @return The character error message, or `NULL` when the entry succeeded.
     error_of = function(result) {
       if (result[["status"]] == ASSET_BASKETS_SUCCESS_STATUS) {
         return(NULL)
@@ -1878,9 +1878,9 @@ AssetBasket <- R6::R6Class(
       message
     },
 
-    #' Turns a date or a date string into the `YYYY-MM-DD` form UBI and MongoDB use.
-    #' @param value A `Date` or a `"YYYY-MM-DD"` character value.
-    #' @return The character date in `YYYY-MM-DD` form, or `value` unchanged when it is not a `Date`.
+    # Turns a date or a date string into the `YYYY-MM-DD` form UBI and MongoDB use.
+    # @param value A `Date` or a `"YYYY-MM-DD"` character value.
+    # @return The character date in `YYYY-MM-DD` form, or `value` unchanged when it is not a `Date`.
     date_text = function(value) {
       if (inherits(value, "Date")) {
         return(format(value, "%Y-%m-%d"))
@@ -1888,9 +1888,9 @@ AssetBasket <- R6::R6Class(
       value
     },
 
-    #' Writes a value the way a Python f-string would, with `NULL` as `None`.
-    #' @param value A scalar or `NULL`.
-    #' @return A character value.
+    # Writes a value the way a Python f-string would, with `NULL` as `None`.
+    # @param value A scalar or `NULL`.
+    # @return A character value.
     python_text = function(value) {
       if (is.null(value)) {
         return("None")
@@ -1898,9 +1898,9 @@ AssetBasket <- R6::R6Class(
       as.character(value)
     },
 
-    #' Writes a number the way Python's `repr` writes it, so a whole double reads `1.0` and an integer reads `1`.
-    #' @param value A numeric or integer scalar.
-    #' @return A character value.
+    # Writes a number the way Python's `repr` writes it, so a whole double reads `1.0` and an integer reads `1`.
+    # @param value A numeric or integer scalar.
+    # @return A character value.
     python_number_text = function(value) {
       if (is.integer(value)) {
         return(as.character(value))

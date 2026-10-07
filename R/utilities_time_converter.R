@@ -120,9 +120,9 @@ TimeConverter <- R6::R6Class(
     }
   ),
   private = list(
-    #' Reads one ISO 8601 moment as seconds since 1970.
-    #' @param value A character moment such as `"2026-09-29T09:15:00.25+05:30"`.
-    #' @return The numeric seconds since 1970-01-01 UTC, or `NA` when the text cannot be read.
+    # Reads one ISO 8601 moment as seconds since 1970.
+    # @param value A character moment such as `"2026-09-29T09:15:00.25+05:30"`.
+    # @return The numeric seconds since 1970-01-01 UTC, or `NA` when the text cannot be read.
     epoch_seconds = function(value) {
       text <- sub(" ", "T", value, fixed = TRUE)
       offset_seconds <- NA_real_

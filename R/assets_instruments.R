@@ -632,9 +632,9 @@ Instrument <- R6::R6Class(
   private = list(
     unified_broker_interface = NULL,
 
-    #' Copies the instrument's identity, lot size and tick size from UBI's details.
-    #' @param details The named list UBI returns from `/api/instruments/details` for this instrument.
-    #' @return `NULL`, invisibly.
+    # Copies the instrument's identity, lot size and tick size from UBI's details.
+    # @param details The named list UBI returns from `/api/instruments/details` for this instrument.
+    # @return `NULL`, invisibly.
     apply_details = function(details) {
       converter <- TimeConverter$new()
       self$instrument_id <- details[["instrument_id"]]
@@ -660,10 +660,10 @@ Instrument <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' Reads the instrument's details from UBI.
-    #' @param lookup A named list of the constructor's lookup arguments, where `NULL` means not given.
-    #' @return The named list UBI returns from `/api/instruments/details`.
-    #' @details Errors: signals `InstrumentError` when UBI has no instrument matching the lookup, and another `UnifiedBrokerInterfaceError` subclass for any other failure.
+    # Reads the instrument's details from UBI.
+    # @param lookup A named list of the constructor's lookup arguments, where `NULL` means not given.
+    # @return The named list UBI returns from `/api/instruments/details`.
+    # @details Errors: signals `InstrumentError` when UBI has no instrument matching the lookup, and another `UnifiedBrokerInterfaceError` subclass for any other failure.
     fetch_details = function(lookup) {
       parameters <- list()
       if (!is.null(lookup[["instrument_id"]])) {
@@ -692,9 +692,9 @@ Instrument <- R6::R6Class(
       )
     },
 
-    #' Describes lookup parameters the way Python prints a dictionary.
-    #' @param parameters A named list of lookup values.
-    #' @return A character value such as `"{'exchange': 'nse', 'symbol': 'INFY'}"`.
+    # Describes lookup parameters the way Python prints a dictionary.
+    # @param parameters A named list of lookup values.
+    # @return A character value such as `"{'exchange': 'nse', 'symbol': 'INFY'}"`.
     lookup_text = function(parameters) {
       pieces <- character(0)
       for (name in names(parameters)) {
@@ -715,9 +715,9 @@ Instrument <- R6::R6Class(
       sprintf("{%s}", paste(pieces, collapse = ", "))
     },
 
-    #' Writes a tick period boundary the way the Python library sends it.
-    #' @param value A `POSIXct` or a character value.
-    #' @return A character value, with a `POSIXct` written in India time with its offset.
+    # Writes a tick period boundary the way the Python library sends it.
+    # @param value A `POSIXct` or a character value.
+    # @return A character value, with a `POSIXct` written in India time with its offset.
     instant_text = function(value) {
       if (inherits(value, "POSIXct")) {
         return(
@@ -731,9 +731,9 @@ Instrument <- R6::R6Class(
       as.character(value)
     },
 
-    #' Turns one recorded tick from UBI into one flat row.
-    #' @param tick The named list of one tick as UBI's ticks route serves it.
-    #' @return A named list with the tick's scalar fields and five numbered levels of `price`, `quantity` and `orders` on each side, with `NULL` for an empty level.
+    # Turns one recorded tick from UBI into one flat row.
+    # @param tick The named list of one tick as UBI's ticks route serves it.
+    # @return A named list with the tick's scalar fields and five numbered levels of `price`, `quantity` and `orders` on each side, with `NULL` for an empty level.
     flatten_tick = function(tick) {
       row <- list()
       scalar_fields <- list(
@@ -1006,10 +1006,10 @@ InstrumentCatalogue <- R6::R6Class(
   private = list(
     unified_broker_interface = NULL,
 
-    #' Gives a column to sort by, or a column of missing values when the frame lacks it.
-    #' @param frame A `data.frame`.
-    #' @param column A character column name.
-    #' @return The column, or an `NA` vector as long as the frame.
+    # Gives a column to sort by, or a column of missing values when the frame lacks it.
+    # @param frame A `data.frame`.
+    # @param column A character column name.
+    # @return The column, or an `NA` vector as long as the frame.
     sortable_column = function(frame, column) {
       if (column %in% names(frame)) {
         return(frame[[column]])
@@ -13200,9 +13200,9 @@ TradeableInstrument <- R6::R6Class(
     }
   ),
   private = list(
-    #' Cancels one parent for `cancel_open_orders()`, reporting a failure rather than signalling it.
-    #' @param parent_id The character id of the parent to cancel.
-    #' @return A named list with `outcome`, a named list with `parent_id`, `order_id`, `broker`, `cancelled` and `error` for the returned frame, and `engine_answered`, a logical that is `TRUE` when the engine took the cancel, so the parent's own orders need no separate cancel.
+    # Cancels one parent for `cancel_open_orders()`, reporting a failure rather than signalling it.
+    # @param parent_id The character id of the parent to cancel.
+    # @return A named list with `outcome`, a named list with `parent_id`, `order_id`, `broker`, `cancelled` and `error` for the returned frame, and `engine_answered`, a logical that is `TRUE` when the engine took the cancel, so the parent's own orders need no separate cancel.
     cancel_one_parent = function(parent_id) {
       outcome <- list(
         parent_id = parent_id,
@@ -13239,10 +13239,10 @@ TradeableInstrument <- R6::R6Class(
       )
     },
 
-    #' Cancels broker orders in one request for `cancel_open_orders()`, reporting each failure rather than signalling it.
-    #' @param orders_to_cancel A list of named lists, each with the `order_id` and `broker` of one order.
-    #' @return A list of named lists, one per order in the same order, each with `parent_id`, `order_id`, `broker`, `cancelled` and `error` for the returned frame, which is empty when `orders_to_cancel` is.
-    #' @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when UBI refused the whole list, or could not be reached.
+    # Cancels broker orders in one request for `cancel_open_orders()`, reporting each failure rather than signalling it.
+    # @param orders_to_cancel A list of named lists, each with the `order_id` and `broker` of one order.
+    # @return A list of named lists, one per order in the same order, each with `parent_id`, `order_id`, `broker`, `cancelled` and `error` for the returned frame, which is empty when `orders_to_cancel` is.
+    # @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when UBI refused the whole list, or could not be reached.
     cancel_order_list = function(orders_to_cancel) {
       if (length(orders_to_cancel) == 0) {
         return(list())
@@ -13281,10 +13281,10 @@ TradeableInstrument <- R6::R6Class(
       outcomes
     },
 
-    #' Reads the order book and keeps this instrument's rows in the wanted statuses.
-    #' @param wanted_statuses A character vector of upper-case UBI statuses to keep, or `NULL` to keep every status.
-    #' @return A `data.frame` of the matching rows, or `NULL` when no row matches.
-    #' @details Errors: signals `BrokerError` when no broker's order book could be read; `ServiceUnavailableError` when UBI's order book document is missing or too old to serve; and another `UnifiedBrokerInterfaceError` subclass for any other failure.
+    # Reads the order book and keeps this instrument's rows in the wanted statuses.
+    # @param wanted_statuses A character vector of upper-case UBI statuses to keep, or `NULL` to keep every status.
+    # @return A `data.frame` of the matching rows, or `NULL` when no row matches.
+    # @details Errors: signals `BrokerError` when no broker's order book could be read; `ServiceUnavailableError` when UBI's order book document is missing or too old to serve; and another `UnifiedBrokerInterfaceError` subclass for any other failure.
     orders_with_status = function(wanted_statuses) {
       rows <- private$unified_broker_interface$get(
         INSTRUMENTS_ORDER_DETAILS_PATH
@@ -13301,18 +13301,18 @@ TradeableInstrument <- R6::R6Class(
       private$frame_for_this_instrument(wanted_rows)
     },
 
-    #' Sends an order that UBI sizes and directs from the position it closes.
-    #'
-    #' The side sent is only a placeholder, because UBI replaces it with the one that closes the position. The order is marked as closing a position, so it may use the part of a broker's daily order cap that UBI keeps for exits.
-    #' @param kind The character quantity reference kind, `"reduce_position"` or `"liquidate_position"`.
-    #' @param quantity The integer largest quantity to close, or `NULL` to close the whole position.
-    #' @param product The character order product of the position, `"cnc"`, `"mis"` or `"nrml"`, or `NULL` to use the only position held.
-    #' @param price The numeric limit price in rupees, or `NULL` to send a market order.
-    #' @param validity The character validity, or `NULL`.
-    #' @param after_market A logical that is `TRUE` to send the order as an after-market order.
-    #' @param tag A character label for the order, or `NULL`.
-    #' @return The named list `place_order()` returns.
-    #' @details Errors: signals `PositionError` when no product was named and there is not exactly one position, or the product is not `cnc`, `mis` or `nrml`; and a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
+    # Sends an order that UBI sizes and directs from the position it closes.
+    #
+    # The side sent is only a placeholder, because UBI replaces it with the one that closes the position. The order is marked as closing a position, so it may use the part of a broker's daily order cap that UBI keeps for exits.
+    # @param kind The character quantity reference kind, `"reduce_position"` or `"liquidate_position"`.
+    # @param quantity The integer largest quantity to close, or `NULL` to close the whole position.
+    # @param product The character order product of the position, `"cnc"`, `"mis"` or `"nrml"`, or `NULL` to use the only position held.
+    # @param price The numeric limit price in rupees, or `NULL` to send a market order.
+    # @param validity The character validity, or `NULL`.
+    # @param after_market A logical that is `TRUE` to send the order as an after-market order.
+    # @param tag A character label for the order, or `NULL`.
+    # @return The named list `place_order()` returns.
+    # @details Errors: signals `PositionError` when no product was named and there is not exactly one position, or the product is not `cnc`, `mis` or `nrml`; and a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
     place_to_close_position = function(
       kind,
       quantity,
@@ -13365,11 +13365,11 @@ TradeableInstrument <- R6::R6Class(
       )
     },
 
-    #' Reads this instrument's positions, keeping the ones UBI can trade.
-    #'
-    #' UBI reports a position's product as `delivery`, `intraday`, `carry`, `margin_trading`, `cover` or `bracket`, but it accepts orders only for the first three. The last three come from order kinds its place route cannot send, so they are dropped here, which is the one place that happens.
-    #' @return A `data.frame` of the positions that can be traded through UBI, or `NULL` when there are none.
-    #' @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when the positions cannot be read.
+    # Reads this instrument's positions, keeping the ones UBI can trade.
+    #
+    # UBI reports a position's product as `delivery`, `intraday`, `carry`, `margin_trading`, `cover` or `bracket`, but it accepts orders only for the first three. The last three come from order kinds its place route cannot send, so they are dropped here, which is the one place that happens.
+    # @return A `data.frame` of the positions that can be traded through UBI, or `NULL` when there are none.
+    # @details Errors: signals a `UnifiedBrokerInterfaceError` subclass when the positions cannot be read.
     tradeable_positions = function() {
       frame <- self$net_positions
       if (is.null(frame)) {
@@ -13384,10 +13384,10 @@ TradeableInstrument <- R6::R6Class(
       kept
     },
 
-    #' Picks the one position to act on.
-    #' @param product The character order product naming the position, `"cnc"`, `"mis"` or `"nrml"`, or `NULL` to use the only position held.
-    #' @return The named list row of the position, with UBI's own `product` spelling in it.
-    #' @details Errors: signals `PositionError` when nothing tradeable is held, the named product is not held, or several are held and none was named.
+    # Picks the one position to act on.
+    # @param product The character order product naming the position, `"cnc"`, `"mis"` or `"nrml"`, or `NULL` to use the only position held.
+    # @return The named list row of the position, with UBI's own `product` spelling in it.
+    # @details Errors: signals `PositionError` when nothing tradeable is held, the named product is not held, or several are held and none was named.
     position_row = function(product) {
       frame <- private$tradeable_positions()
       if (is.null(frame)) {
@@ -13434,16 +13434,16 @@ TradeableInstrument <- R6::R6Class(
       )
     },
 
-    #' Sends the order that changes a position, as a market or a limit order.
-    #' @param transaction_type The character direction to trade in, `"buy"` or `"sell"`.
-    #' @param quantity The integer quantity in underlying units.
-    #' @param product The character order product, `"cnc"`, `"mis"` or `"nrml"`.
-    #' @param price The numeric limit price in rupees, or `NULL` to send a market order.
-    #' @param validity The character validity, or `NULL`.
-    #' @param after_market A logical that is `TRUE` to send the order as an after-market order.
-    #' @param tag A character label for the order, or `NULL`.
-    #' @return The named list `place_order()` returns.
-    #' @details Errors: signals a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
+    # Sends the order that changes a position, as a market or a limit order.
+    # @param transaction_type The character direction to trade in, `"buy"` or `"sell"`.
+    # @param quantity The integer quantity in underlying units.
+    # @param product The character order product, `"cnc"`, `"mis"` or `"nrml"`.
+    # @param price The numeric limit price in rupees, or `NULL` to send a market order.
+    # @param validity The character validity, or `NULL`.
+    # @param after_market A logical that is `TRUE` to send the order as an after-market order.
+    # @param tag A character label for the order, or `NULL`.
+    # @return The named list `place_order()` returns.
+    # @details Errors: signals a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
     place_to_change_position = function(
       transaction_type,
       quantity,
@@ -13497,16 +13497,16 @@ TradeableInstrument <- R6::R6Class(
       )
     },
 
-    #' Opens a position in an instrument that holds none.
-    #' @param quantity The integer quantity in underlying units.
-    #' @param product The character order product to open under, or `NULL`.
-    #' @param transaction_type The character direction to open in, `"buy"` or `"sell"`, or `NULL`.
-    #' @param price The numeric limit price in rupees, or `NULL` to send a market order.
-    #' @param validity The character validity, or `NULL`.
-    #' @param after_market A logical that is `TRUE` to send the order as an after-market order.
-    #' @param tag A character label for the order, or `NULL`.
-    #' @return The named list `place_order()` returns.
-    #' @details Errors: signals `PositionError` when no direction or no product was given, and a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
+    # Opens a position in an instrument that holds none.
+    # @param quantity The integer quantity in underlying units.
+    # @param product The character order product to open under, or `NULL`.
+    # @param transaction_type The character direction to open in, `"buy"` or `"sell"`, or `NULL`.
+    # @param price The numeric limit price in rupees, or `NULL` to send a market order.
+    # @param validity The character validity, or `NULL`.
+    # @param after_market A logical that is `TRUE` to send the order as an after-market order.
+    # @param tag A character label for the order, or `NULL`.
+    # @return The named list `place_order()` returns.
+    # @details Errors: signals `PositionError` when no direction or no product was given, and a `UnifiedBrokerInterfaceError` subclass for any failure reported by, or on the way to, UBI.
     open_a_new_position = function(
       quantity,
       product,
@@ -13536,11 +13536,11 @@ TradeableInstrument <- R6::R6Class(
       )
     },
 
-    #' Keeps the rows belonging to this instrument and makes a frame of them.
-    #'
-    #' A row UBI could not trace back to an instrument carries a null `instrument_id` and is left out, because there is no other field that names this instrument reliably.
-    #' @param rows A list of named lists from one of UBI's order, trade or position documents, each with an `instrument_id`.
-    #' @return A `data.frame` of the matching rows, or `NULL` when no row belongs to this instrument.
+    # Keeps the rows belonging to this instrument and makes a frame of them.
+    #
+    # A row UBI could not trace back to an instrument carries a null `instrument_id` and is left out, because there is no other field that names this instrument reliably.
+    # @param rows A list of named lists from one of UBI's order, trade or position documents, each with an `instrument_id`.
+    # @return A `data.frame` of the matching rows, or `NULL` when no row belongs to this instrument.
     frame_for_this_instrument = function(rows) {
       matching_rows <- list()
       for (row in rows) {
@@ -13551,9 +13551,9 @@ TradeableInstrument <- R6::R6Class(
       FrameBuilder$new()$frame(matching_rows)
     },
 
-    #' Picks the best level from one side of an order book.
-    #' @param levels A list of named lists with `price`, `quantity` and `orders`, best first.
-    #' @return The first named list in `levels`, or `NULL` when `levels` is empty.
+    # Picks the best level from one side of an order book.
+    # @param levels A list of named lists with `price`, `quantity` and `orders`, best first.
+    # @return The first named list in `levels`, or `NULL` when `levels` is empty.
     best_level = function(levels) {
       if (length(levels) == 0) {
         return(NULL)
@@ -13561,9 +13561,9 @@ TradeableInstrument <- R6::R6Class(
       levels[[1]]
     },
 
-    #' Describes a caught error the way the Python library does, as its class name and message.
-    #' @param error A condition.
-    #' @return A character value such as `"ConflictError: no position"`.
+    # Describes a caught error the way the Python library does, as its class name and message.
+    # @param error A condition.
+    # @return A character value such as `"ConflictError: no position"`.
     error_text = function(error) {
       sprintf(
         "%s: %s",
@@ -13572,9 +13572,9 @@ TradeableInstrument <- R6::R6Class(
       )
     },
 
-    #' Writes a value the way a Python f-string would, with `NULL` as `None`.
-    #' @param value A scalar or `NULL`.
-    #' @return A character value.
+    # Writes a value the way a Python f-string would, with `NULL` as `None`.
+    # @param value A scalar or `NULL`.
+    # @return A character value.
     python_text = function(value) {
       if (is.null(value)) {
         return("None")
@@ -14274,9 +14274,9 @@ Derivative <- R6::R6Class(
   private = list(
     given_underlying = NULL,
 
-    #' Works out where the family's default underlying is found, from the contract's own segment.
-    #' @return The character exchange-prefixed segment, such as `"nse_equity_indices"`, or `NULL` when the family has no default underlying for this kind of contract.
-    #' @details Errors: signals `DerivativeError` when the contract's segment is not one of the sixteen derivative segments in `INSTRUMENTS_UNDERLYING_SEGMENT_FOR_DERIVATIVE_SEGMENT`.
+    # Works out where the family's default underlying is found, from the contract's own segment.
+    # @return The character exchange-prefixed segment, such as `"nse_equity_indices"`, or `NULL` when the family has no default underlying for this kind of contract.
+    # @details Errors: signals `DerivativeError` when the contract's segment is not one of the sixteen derivative segments in `INSTRUMENTS_UNDERLYING_SEGMENT_FOR_DERIVATIVE_SEGMENT`.
     underlying_segment_from_table = function() {
       prefix <- paste0(self$exchange, "_")
       bare_segment <- self$segment
@@ -14301,9 +14301,9 @@ Derivative <- R6::R6Class(
       paste0(self$exchange, "_", underlying_bare_segment)
     },
 
-    #' Finds the underlying when none was given, trying UBI's link first and then the family's default.
-    #' @return The underlying as an `Instrument`: a `TradeableInstrument` or `NonTradeableInstrument` for UBI's link or an equity's share or index, or a `Futures` for an option priced off a future.
-    #' @details Errors: signals `UnderlyingError` when UBI gives no link and the family has no default for this contract, or the default finds nothing; and a `UnifiedBrokerInterfaceError` subclass for any other failure.
+    # Finds the underlying when none was given, trying UBI's link first and then the family's default.
+    # @return The underlying as an `Instrument`: a `TradeableInstrument` or `NonTradeableInstrument` for UBI's link or an equity's share or index, or a `Futures` for an option priced off a future.
+    # @details Errors: signals `UnderlyingError` when UBI gives no link and the family has no default for this contract, or the default finds nothing; and a `UnifiedBrokerInterfaceError` subclass for any other failure.
     look_up_underlying = function() {
       if (!is.null(self$underlying_instrument_id)) {
         linked <- tryCatch(
@@ -14369,11 +14369,11 @@ Derivative <- R6::R6Class(
       )
     },
 
-    #' Finds the future the contract is priced off: the same underlying's future that expires first on or after the contract does.
-    #'
-    #' On or after, rather than in the same month, because an option can settle into a later future: an MCX GOLD option expiring at the end of October settles into the December future, since the October one has already expired.
-    #' @return The future as a `Futures`.
-    #' @details Errors: signals `UnderlyingError` when no live future on the same underlying expires on or after the contract, and a `UnifiedBrokerInterfaceError` subclass for any other failure.
+    # Finds the future the contract is priced off: the same underlying's future that expires first on or after the contract does.
+    #
+    # On or after, rather than in the same month, because an option can settle into a later future: an MCX GOLD option expiring at the end of October settles into the December future, since the October one has already expired.
+    # @return The future as a `Futures`.
+    # @details Errors: signals `UnderlyingError` when no live future on the same underlying expires on or after the contract, and a `UnifiedBrokerInterfaceError` subclass for any other failure.
     nearest_future = function() {
       frame <- InstrumentCatalogue$new(
         private$unified_broker_interface
@@ -14416,8 +14416,8 @@ Derivative <- R6::R6Class(
       )
     },
 
-    #' Says whether the contract is priced off a future, which decides between the Black-76 and Black-Scholes models.
-    #' @return A logical that is `TRUE` when the given underlying is a future, or, with none given, when the family's default is a future.
+    # Says whether the contract is priced off a future, which decides between the Black-76 and Black-Scholes models.
+    # @return A logical that is `TRUE` when the given underlying is a future, or, with none given, when the family's default is a future.
     underlying_is_future = function() {
       if (!is.null(private$given_underlying)) {
         return(identical(private$given_underlying$shape, INSTRUMENTS_FUTURE_SHAPE))
@@ -15973,9 +15973,9 @@ Option <- R6::R6Class(
     }
   ),
   private = list(
-    #' Works out the option's intrinsic value at a given underlying price.
-    #' @param underlying_price The numeric price of the underlying.
-    #' @return The numeric intrinsic value, never less than zero.
+    # Works out the option's intrinsic value at a given underlying price.
+    # @param underlying_price The numeric price of the underlying.
+    # @return The numeric intrinsic value, never less than zero.
     intrinsic_value_at = function(underlying_price) {
       if (self$is_call) {
         return(max(underlying_price - self$strike_price, 0))
@@ -15983,8 +15983,8 @@ Option <- R6::R6Class(
       max(self$strike_price - underlying_price, 0)
     },
 
-    #' Works out the time from now until 15:30 India time on the expiry date, in years.
-    #' @return The numeric number of years, which is zero or negative at or after that moment.
+    # Works out the time from now until 15:30 India time on the expiry date, in years.
+    # @return The numeric number of years, which is zero or negative at or after that moment.
     years_to_expiry = function() {
       converter <- TimeConverter$new()
       expiry_moment <- converter$moment_on(self$expiry_date, INSTRUMENTS_EXPIRY_TIME)

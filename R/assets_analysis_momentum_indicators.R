@@ -1702,13 +1702,13 @@ MomentumIndicators <- R6::R6Class(
     }
   ),
   private = list(
-    #' Returns each value's counterpart a number of candles earlier, the base TA-Lib's rate of change functions divide by.
-    #'
-    #' @param values A numeric vector of candle values, oldest first.
-    #' @param window The integer number of candles to look back.
-    #' @param function_name The character TA-Lib function name, such as `"TA_ROC"`, used in the error message.
-    #' @return A numeric vector as long as `values`, holding `NA` for the first `window` positions and the value `window` candles earlier everywhere else.
-    #' @details Errors: signals a plain error when `window` is below 1 or above 100000, the range TA-Lib accepts.
+    # Returns each value's counterpart a number of candles earlier, the base TA-Lib's rate of change functions divide by.
+    #
+    # @param values A numeric vector of candle values, oldest first.
+    # @param window The integer number of candles to look back.
+    # @param function_name The character TA-Lib function name, such as `"TA_ROC"`, used in the error message.
+    # @return A numeric vector as long as `values`, holding `NA` for the first `window` positions and the value `window` candles earlier everywhere else.
+    # @details Errors: signals a plain error when `window` is below 1 or above 100000, the range TA-Lib accepts.
     values_window_before = function(values, window, function_name) {
       if (window < 1 || window > 100000) {
         stop(

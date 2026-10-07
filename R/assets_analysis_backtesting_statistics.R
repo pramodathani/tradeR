@@ -288,9 +288,9 @@ BacktestStatistics <- R6::R6Class(
     }
   ),
   private = list(
-    #' Stands in for Python's `value or nan`, which turns a zero into `NaN`.
-    #' @param value A numeric value.
-    #' @return `value`, or `NaN` when it is zero.
+    # Stands in for Python's `value or nan`, which turns a zero into `NaN`.
+    # @param value A numeric value.
+    # @return `value`, or `NaN` when it is zero.
     or_nan = function(value) {
       if (!is.na(value) && value == 0) {
         return(NaN)
@@ -298,9 +298,9 @@ BacktestStatistics <- R6::R6Class(
       value
     },
 
-    #' Takes the mean of the known values, as pandas does.
-    #' @param values A numeric vector that may hold `NA` values.
-    #' @return The numeric mean of the values that are not `NA`, or `NaN` when there are none.
+    # Takes the mean of the known values, as pandas does.
+    # @param values A numeric vector that may hold `NA` values.
+    # @return The numeric mean of the values that are not `NA`, or `NaN` when there are none.
     mean_or_nan = function(values) {
       known <- values[!is.na(values)]
       if (length(known) == 0) {
@@ -309,9 +309,9 @@ BacktestStatistics <- R6::R6Class(
       mean(known)
     },
 
-    #' Takes the largest of the known values, as pandas does.
-    #' @param values A numeric vector that may hold `NA` values.
-    #' @return The numeric largest value that is not `NA`, or `NaN` when there are none.
+    # Takes the largest of the known values, as pandas does.
+    # @param values A numeric vector that may hold `NA` values.
+    # @return The numeric largest value that is not `NA`, or `NaN` when there are none.
     max_or_nan = function(values) {
       known <- values[!is.na(values)]
       if (length(known) == 0) {
@@ -320,8 +320,8 @@ BacktestStatistics <- R6::R6Class(
       max(known)
     },
 
-    #' Works out the typical gap between candles, as the median gap among the last 100 candles.
-    #' @return The numeric number of seconds between candles.
+    # Works out the typical gap between candles, as the median gap among the last 100 candles.
+    # @return The numeric number of seconds between candles.
     period_seconds = function() {
       datetimes <- utils::tail(self$candles$datetime, 100)
       gaps <- diff(as.numeric(datetimes))
@@ -331,9 +331,9 @@ BacktestStatistics <- R6::R6Class(
       stats::median(gaps)
     },
 
-    #' Chooses how many periods make a year from the gap between candles, as backtesting.py does.
-    #' @param period_seconds The numeric number of seconds between candles.
-    #' @return The numeric number of periods in a year: 52 for weekly candles, 12 for monthly, 1 for yearly, and otherwise 365 when weekends trade or 252 when they do not.
+    # Chooses how many periods make a year from the gap between candles, as backtesting.py does.
+    # @param period_seconds The numeric number of seconds between candles.
+    # @return The numeric number of periods in a year: 52 for weekly candles, 12 for monthly, 1 for yearly, and otherwise 365 when weekends trade or 252 when they do not.
     annual_trading_days = function(period_seconds) {
       period_days <- floor(period_seconds / 86400)
       if (!is.na(period_days) && period_days == 7) {
@@ -356,9 +356,9 @@ BacktestStatistics <- R6::R6Class(
       252
     },
 
-    #' Gives the return of the equity from one calendar period to the next, taking the last equity of each day, or of each week, month or year for such candles.
-    #' @param period_seconds The numeric number of seconds between candles.
-    #' @return A numeric vector of returns whose first value is `NA`.
+    # Gives the return of the equity from one calendar period to the next, taking the last equity of each day, or of each week, month or year for such candles.
+    # @param period_seconds The numeric number of seconds between candles.
+    # @return A numeric vector of returns whose first value is `NA`.
     period_returns = function(period_seconds) {
       local_times <- as.POSIXlt(
         self$candles$datetime,
@@ -391,9 +391,9 @@ BacktestStatistics <- R6::R6Class(
       )
     },
 
-    #' Takes the geometric mean of returns, counting a missing return as zero, as backtesting.py does.
-    #' @param returns A numeric vector of fractional returns.
-    #' @return The numeric geometric mean return, 0 when any return is -1 or below, or `NaN` when there are no returns.
+    # Takes the geometric mean of returns, counting a missing return as zero, as backtesting.py does.
+    # @param returns A numeric vector of fractional returns.
+    # @return The numeric geometric mean return, 0 when any return is -1 or below, or `NaN` when there are no returns.
     geometric_mean = function(returns) {
       returns[is.na(returns)] <- 0
       growth <- returns + 1
@@ -406,10 +406,10 @@ BacktestStatistics <- R6::R6Class(
       exp(sum(log(growth)) / length(growth)) - 1
     },
 
-    #' Calculates the beta of the equity's log returns against the closes' log returns.
-    #' @param equity A numeric vector of equity values.
-    #' @param closes A numeric vector of closes.
-    #' @return The numeric beta, or `NaN` when there are fewer than three candles.
+    # Calculates the beta of the equity's log returns against the closes' log returns.
+    # @param equity A numeric vector of equity values.
+    # @param closes A numeric vector of closes.
+    # @return The numeric beta, or `NaN` when there are fewer than three candles.
     beta = function(equity, closes) {
       count <- length(equity)
       if (count < 3) {
@@ -421,9 +421,9 @@ BacktestStatistics <- R6::R6Class(
         stats::var(market_log_returns)
     },
 
-    #' Finds each drawdown's length and depth, the way backtesting.py's `compute_drawdown_duration_peaks` does.
-    #' @param drawdown A numeric vector of drawdowns as positive fractions, zero at a new peak.
-    #' @return A named list with `durations`, a numeric vector of seconds holding the length of each drawdown at the candle where it ended and `NA` elsewhere; `peaks`, a numeric vector with the depth of each drawdown at the same candles; and `are_durations`, a logical that is `FALSE` when no drawdown ended, in which case both vectors hold the drawdowns with zeros made `NA`, as pandas returns them.
+    # Finds each drawdown's length and depth, the way backtesting.py's `compute_drawdown_duration_peaks` does.
+    # @param drawdown A numeric vector of drawdowns as positive fractions, zero at a new peak.
+    # @return A named list with `durations`, a numeric vector of seconds holding the length of each drawdown at the candle where it ended and `NA` elsewhere; `peaks`, a numeric vector with the depth of each drawdown at the same candles; and `are_durations`, a logical that is `FALSE` when no drawdown ended, in which case both vectors hold the drawdowns with zeros made `NA`, as pandas returns them.
     drawdown_durations_and_peaks = function(drawdown) {
       count <- length(drawdown)
       seconds <- as.numeric(self$candles$datetime)
@@ -463,11 +463,11 @@ BacktestStatistics <- R6::R6Class(
       )
     },
 
-    #' Rounds a duration up to the resolution of the candles and makes it a `difftime` in days.
-    #' @param seconds A numeric number of seconds, or `NaN`.
-    #' @param period_seconds The numeric number of seconds between candles.
-    #' @param is_duration A logical that is `FALSE` when `seconds` is not a duration but a drawdown fraction, which is returned unchanged as backtesting.py does.
-    #' @return A `difftime` in days, `NA` when `seconds` is `NaN`, or `seconds` itself when `is_duration` is `FALSE`.
+    # Rounds a duration up to the resolution of the candles and makes it a `difftime` in days.
+    # @param seconds A numeric number of seconds, or `NaN`.
+    # @param period_seconds The numeric number of seconds between candles.
+    # @param is_duration A logical that is `FALSE` when `seconds` is not a duration but a drawdown fraction, which is returned unchanged as backtesting.py does.
+    # @return A `difftime` in days, `NA` when `seconds` is `NaN`, or `seconds` itself when `is_duration` is `FALSE`.
     round_duration = function(seconds, period_seconds, is_duration) {
       if (!is_duration) {
         return(seconds)

@@ -177,9 +177,9 @@ UnifiedBrokerInterface <- R6::R6Class(
     api_key = NULL,
     api_secret = NULL,
 
-    #' Reads the api key and secret from the project's MongoDB `settings` collection.
-    #' @return `NULL`, invisibly.
-    #' @details Errors: signals a plain error when no settings document for UBI exists or it lacks the key or secret.
+    # Reads the api key and secret from the project's MongoDB `settings` collection.
+    # @return `NULL`, invisibly.
+    # @details Errors: signals a plain error when no settings document for UBI exists or it lacks the key or secret.
     load_credentials = function() {
       database_name <- private$configuration$mongodb_database_name
       collection <- mongolite::mongo(
@@ -209,11 +209,11 @@ UnifiedBrokerInterface <- R6::R6Class(
       )
     },
 
-    #' Keeps an api key and secret, refusing a pair with either part missing.
-    #' @param credentials A named list with `api_key` and `api_secret`.
-    #' @param source A character description of where the pair came from, used in the error message.
-    #' @return `NULL`, invisibly.
-    #' @details Errors: signals a plain error when the key or the secret is missing or empty.
+    # Keeps an api key and secret, refusing a pair with either part missing.
+    # @param credentials A named list with `api_key` and `api_secret`.
+    # @param source A character description of where the pair came from, used in the error message.
+    # @return `NULL`, invisibly.
+    # @details Errors: signals a plain error when the key or the secret is missing or empty.
     use_credentials = function(credentials, source) {
       api_key <- credentials[["api_key"]]
       api_secret <- credentials[["api_secret"]]
@@ -230,15 +230,15 @@ UnifiedBrokerInterface <- R6::R6Class(
       invisible(NULL)
     },
 
-    #' Sends an authenticated request, reconnecting once if the token is refused.
-    #' @param method A character HTTP method, such as `"GET"`.
-    #' @param path A character route.
-    #' @param params A named list of query parameters, or `NULL`.
-    #' @param body A list to send as the JSON body, or `NULL`.
-    #' @param is_retry A logical that is `TRUE` when this is already the retry after a 401.
-    #' @param timeout_seconds A numeric timeout for this request, or `NULL` for the default.
-    #' @return The parsed JSON answer as a list, or `NULL` when it was not JSON.
-    #' @details Errors: signals a `UnifiedBrokerInterfaceError` subclass for a failing status or when UBI cannot be reached.
+    # Sends an authenticated request, reconnecting once if the token is refused.
+    # @param method A character HTTP method, such as `"GET"`.
+    # @param path A character route.
+    # @param params A named list of query parameters, or `NULL`.
+    # @param body A list to send as the JSON body, or `NULL`.
+    # @param is_retry A logical that is `TRUE` when this is already the retry after a 401.
+    # @param timeout_seconds A numeric timeout for this request, or `NULL` for the default.
+    # @return The parsed JSON answer as a list, or `NULL` when it was not JSON.
+    # @details Errors: signals a `UnifiedBrokerInterfaceError` subclass for a failing status or when UBI cannot be reached.
     request = function(
       method,
       path,
@@ -282,15 +282,15 @@ UnifiedBrokerInterface <- R6::R6Class(
       response_body
     },
 
-    #' Sends one HTTP request to the server, whatever status comes back.
-    #' @param method A character HTTP method.
-    #' @param path A character route.
-    #' @param headers A named list of request headers.
-    #' @param params A named list of query parameters, or `NULL`.
-    #' @param body A list to send as the JSON body, or `NULL`.
-    #' @param timeout_seconds A numeric timeout, or `NULL` for the default.
-    #' @return The `httr2_response` received.
-    #' @details Errors: signals `UnreachableError` when no response arrives.
+    # Sends one HTTP request to the server, whatever status comes back.
+    # @param method A character HTTP method.
+    # @param path A character route.
+    # @param headers A named list of request headers.
+    # @param params A named list of query parameters, or `NULL`.
+    # @param body A list to send as the JSON body, or `NULL`.
+    # @param timeout_seconds A numeric timeout, or `NULL` for the default.
+    # @return The `httr2_response` received.
+    # @details Errors: signals `UnreachableError` when no response arrives.
     send = function(
       method,
       path,
@@ -339,9 +339,9 @@ UnifiedBrokerInterface <- R6::R6Class(
       )
     },
 
-    #' Turns query parameters into the text after the route, leaving out every `NULL` value.
-    #' @param params A named list of query parameters, or `NULL`.
-    #' @return A character query string starting with `?`, or `""` when there are no parameters.
+    # Turns query parameters into the text after the route, leaving out every `NULL` value.
+    # @param params A named list of query parameters, or `NULL`.
+    # @return A character query string starting with `?`, or `""` when there are no parameters.
     query_text = function(params) {
       if (is.null(params)) {
         return("")
@@ -369,9 +369,9 @@ UnifiedBrokerInterface <- R6::R6Class(
       paste0("?", paste(pieces, collapse = "&"))
     },
 
-    #' Writes one query parameter value as text, the way the Python library's `requests` call writes it.
-    #' @param value A single character, numeric, logical or `Date` value.
-    #' @return A character value.
+    # Writes one query parameter value as text, the way the Python library's `requests` call writes it.
+    # @param value A single character, numeric, logical or `Date` value.
+    # @return A character value.
     parameter_text = function(value) {
       if (inherits(value, "Date")) {
         return(format(value, "%Y-%m-%d"))
@@ -388,9 +388,9 @@ UnifiedBrokerInterface <- R6::R6Class(
       as.character(value)
     },
 
-    #' Writes a request body as JSON, with every length-one vector as a scalar and `NULL` as null.
-    #' @param body A list to send.
-    #' @return A character JSON document.
+    # Writes a request body as JSON, with every length-one vector as a scalar and `NULL` as null.
+    # @param body A list to send.
+    # @return A character JSON document.
     json_text = function(body) {
       as.character(
         jsonlite::toJSON(
@@ -405,9 +405,9 @@ UnifiedBrokerInterface <- R6::R6Class(
       )
     },
 
-    #' Parses a response body as JSON, keeping objects as named lists and arrays as lists.
-    #' @param response An `httr2_response`.
-    #' @return The parsed body as a list or scalar, or `NULL` when the body is empty or not JSON.
+    # Parses a response body as JSON, keeping objects as named lists and arrays as lists.
+    # @param response An `httr2_response`.
+    # @return The parsed body as a list or scalar, or `NULL` when the body is empty or not JSON.
     parse_body = function(response) {
       if (!httr2::resp_has_body(response)) {
         return(NULL)
@@ -419,9 +419,9 @@ UnifiedBrokerInterface <- R6::R6Class(
       )
     },
 
-    #' Describes the brokers a refusal says UBI passed over, and why.
-    #' @param response_body The parsed body of a failed response.
-    #' @return A character description such as `"zerodha: at order limit"`, or `""` when there is none.
+    # Describes the brokers a refusal says UBI passed over, and why.
+    # @param response_body The parsed body of a failed response.
+    # @return A character description such as `"zerodha: at order limit"`, or `""` when there is none.
     skipped_text = function(response_body) {
       if (!is.list(response_body)) {
         return("")
@@ -447,9 +447,9 @@ UnifiedBrokerInterface <- R6::R6Class(
       paste(parts, collapse = "; ")
     },
 
-    #' Writes a value the way Python's f-string would, with `NULL` as `None`.
-    #' @param value A scalar or `NULL`.
-    #' @return A character value.
+    # Writes a value the way Python's f-string would, with `NULL` as `None`.
+    # @param value A scalar or `NULL`.
+    # @return A character value.
     text_of = function(value) {
       if (is.null(value)) {
         return("None")
@@ -457,11 +457,11 @@ UnifiedBrokerInterface <- R6::R6Class(
       as.character(value)
     },
 
-    #' Signals the error class that matches a failed response's status code.
-    #' @param response The failed `httr2_response`.
-    #' @param response_body Its parsed body.
-    #' @return Never returns.
-    #' @details Errors: always signals a `UnifiedBrokerInterfaceError` subclass.
+    # Signals the error class that matches a failed response's status code.
+    # @param response The failed `httr2_response`.
+    # @param response_body Its parsed body.
+    # @return Never returns.
+    # @details Errors: always signals a `UnifiedBrokerInterfaceError` subclass.
     raise_for_failure = function(response, response_body) {
       status_code <- httr2::resp_status(response)
       message <- NULL
