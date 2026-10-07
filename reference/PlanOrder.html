@@ -9,7 +9,7 @@ A plan combines the existing synthetic order types and their building blocks in 
 UBI checks the whole plan before recording or sending anything and refuses a plan with any problem with HTTP 400, listing every problem with the path where the caller wrote the value it is about, its rule and a message. A problem inside something UBI builds from what the caller wrote, a preset that stands for a join such as a bracket, a repeat's copies or a using's pieces, also gives part, the part as it runs: a bad stop price in a bracket preset is reported at root.presets.0 with a part such as root.each_fill.children.0, and the message may still name the setting the preset becomes, such as trigger_price for the bracket's stop_price. A dry run makes the checks placing makes, so it can be refused with HTTP 409 and the rule protect_needs_position, or with HTTP 400 for a price off the tick, just as placing would. A plan that places nothing at once answers HTTP 202 with an outcome of armed. UBI holds each order that would rest at the broker at a fixed limit price in its virtual order book until the other side of the book reaches it, while UBI's UNIFIED_BROKER_INTERFACE_API_ORDER_HOLD_LIMITS switch is on and the plan does not say otherwise; follow-on orders in a Then join's child, such as exits, and orders on the protect side rest at the broker unless their own OrderPart asks to be held. When a plan is refused after some of its orders have reached a broker, the refused order is listed in the answer's legs with its reason and the others stay watched.
 A plan that traded but whose order meant to follow the trade was refused, such as a hedge, a spread's second leg or a strategy stop's close, ends failed rather than completed, because a position may be left without it, and the parent's message names the part.
 After place(), each part of the plan is named by its path, such as root.first for a bracket's entry or root.each_fill.children.0 for its stop. parts lists them, and cancel_part() and modify_part() act on one part while the rest of the plan carries on.
-The order template's attributes are described on SyntheticOrder."></head><body>
+The order template's attributes are described on SyntheticOrder."><script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"; mermaid.initialize({ startOnLoad: true, theme: "neutral" });</script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -26,6 +26,61 @@ The order template's attributes are described on SyntheticOrder."></head><body>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Get started</h6></li>
+    <li><a class="dropdown-item" href="../articles/get-started.html">Get started</a></li>
+    <li><a class="dropdown-item" href="../articles/get-started-installation.html">Installation</a></li>
+    <li><a class="dropdown-item" href="../articles/get-started-configuration.html">Configuration</a></li>
+    <li><a class="dropdown-item" href="../articles/get-started-first-steps.html">First steps</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Using tradeR</h6></li>
+    <li><a class="dropdown-item" href="../articles/guide.html">Using tradeR</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-instruments.html">Instruments</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-market-data.html">Market data</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-discovery.html">Finding instruments</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-derivatives.html">Derivatives</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-orders.html">Placing and reading orders</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-price-wrappers.html">Price wrappers</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-positions.html">Positions</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-holdings.html">Holding for the long term</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-synthetic-orders.html">Synthetic orders</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-account.html">The account</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-asset-baskets.html">Asset baskets</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-client.html">The UBI client</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-vocabulary.html">Vocabulary</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-errors.html">Errors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Asset classes</h6></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes.html">Asset classes</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-equities.html">Equities</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-fixed-income.html">Fixed income</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-commodities.html">Commodities</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-currencies.html">Currencies</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-funds.html">Funds and trusts</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-mutual-funds.html">Mutual funds</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Analysis</h6></li>
+    <li><a class="dropdown-item" href="../articles/analysis.html">Analysis</a></li>
+    <li><a class="dropdown-item" href="../articles/analysis-indicators.html">Indicators</a></li>
+    <li><a class="dropdown-item" href="../articles/analysis-patterns.html">Candlestick patterns</a></li>
+    <li><a class="dropdown-item" href="../articles/analysis-statistics.html">Statistics and transforms</a></li>
+    <li><a class="dropdown-item" href="../articles/analysis-signals-and-backtests.html">Signals and backtests</a></li>
+    <li><a class="dropdown-item" href="../articles/analysis-performance.html">Performance measures</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Architecture</h6></li>
+    <li><a class="dropdown-item" href="../articles/architecture.html">Architecture</a></li>
+    <li><a class="dropdown-item" href="../articles/architecture-instrument-model.html">The instrument model</a></li>
+    <li><a class="dropdown-item" href="../articles/architecture-order-engine.html">Order engine</a></li>
+    <li><a class="dropdown-item" href="../articles/architecture-design-choices.html">Design choices</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Project</h6></li>
+    <li><a class="dropdown-item" href="../articles/project.html">Project</a></li>
+    <li><a class="dropdown-item" href="../articles/project-structure.html">Repository structure</a></li>
+    <li><a class="dropdown-item" href="../articles/project-adding-an-asset-class.html">Adding an asset class</a></li>
+    <li><a class="dropdown-item" href="../articles/project-writing-docs.html">Writing these docs</a></li>
+  </ul></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
 <li class="nav-item"><a class="external-link nav-link" href="https://github.com/pramodathani/tradeR/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>

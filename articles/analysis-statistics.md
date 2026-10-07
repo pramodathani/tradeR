@@ -1,0 +1,362 @@
+# Statistics and transforms
+
+This article covers the 76 analysis methods that are not indicators or
+patterns. They fall into five classes: summary statistics of a range of
+candles, rolling statistic functions such as beta and linear regression,
+arithmetic between candle columns, mathematical transforms of one
+column, and the four price transforms that combine a candle’s open,
+high, low and close into one figure.
+
+The table below shows the five groups and how their results differ,
+which matters more here than in the other articles: the summary
+statistics return a single number, while the other four return the
+candles with a column added.
+
+| Group | Class | Methods | Returns |
+|----|----|---:|----|
+| [Price statistics](#price-statistics) | [`PriceStatistics`](https://pramodathani.github.io/tradeR/reference/PriceStatistics.md) | 39 | Mostly a single number for the whole range |
+| [Statistic functions](#statistic-functions) | [`StatisticFunctions`](https://pramodathani.github.io/tradeR/reference/StatisticFunctions.md) | 8 | The candles with a rolling column added |
+| [Math operators](#math-operators) | [`MathOperators`](https://pramodathani.github.io/tradeR/reference/MathOperators.md) | 10 | The candles with a column added |
+| [Math transforms](#math-transforms) | [`MathTransforms`](https://pramodathani.github.io/tradeR/reference/MathTransforms.md) | 15 | The candles with a column added |
+| [Price transforms](#price-transforms) | [`PriceTransforms`](https://pramodathani.github.io/tradeR/reference/PriceTransforms.md) | 4 | The candles with a column added |
+
+Every method in this article also takes the five range arguments of
+[`prices()`](https://pramodathani.github.io/tradeR/reference/Instrument.html#method-Instrument-prices),
+which are `interval`, `from_date`, `to_date`, `days` and `adjusted`, and
+returns `NULL` when UBI has no candles for the range.
+[Analysis](https://pramodathani.github.io/tradeR/articles/analysis.html#the-common-arguments)
+describes those arguments, and the tables below leave them out.
+
+## Price statistics
+
+`PriceStatistics` answers questions about a whole range at once, such as
+“what was the highest high this year” or “how skewed were the daily
+returns”. Its 39 methods form three families, each built on the one
+before, as the diagram below shows.
+
+``` mermaid
+
+flowchart LR
+    P["prices()"] --> A["price_high, price_low<br/>price_mean ... price_histogram<br/>12 methods"]
+    P --> V["volumes()"]
+    V --> B["volume_total, volume_high<br/>... volume_histogram<br/>13 methods"]
+    P --> R["returns(column)"]
+    R --> C["returns_high, returns_low<br/>... returns_summary<br/>12 methods"]
+```
+
+`volumes` and `returns` are themselves methods, and they return a
+narrowed data frame of `exchange`, `segment`, `datetime`, `interval` and
+one value column. `returns` divides each value by the one before it and
+subtracts 1, which is what pandas’ `pct_change` does in the Python
+library, so its value is the fractional change from one candle to the
+next, 0.01 for a one per cent rise, and its first row is always `NA`. A
+missing value in the column gives `NA` on both sides of it, as pandas 3
+does. `price_high` and `price_low` always read the `high` and `low`
+columns and take no `column` argument.
+
+The table below lists all 39 methods.
+
+| Method | What it does | Own arguments and defaults | Returns |
+|----|----|----|----|
+| `price_high` | Finds the highest high in the range | none | The highest high as a number |
+| `price_low` | Finds the lowest low in the range | none | The lowest low as a number |
+| `price_mean` | Finds the mean of one candle column in the range | `column = "close"` | The mean as a number |
+| `price_median` | Finds the median of one candle column in the range | `column = "close"` | The median as a number |
+| `price_standard_deviation` | Finds the standard deviation of one candle column in the range | `column = "close"` | The standard deviation as a number |
+| `price_variance` | Finds the variance of one candle column in the range | `column = "close"` | The variance as a number |
+| `price_mean_absolute_deviation` | Finds the mean absolute deviation of one candle column from its mean in the range | `column = "close"` | The mean absolute deviation as a number |
+| `price_skewness` | Finds the skewness of one candle column in the range | `column = "close"` | The skewness as a number |
+| `price_kurtosis` | Finds the kurtosis of one candle column in the range | `column = "close"` | The kurtosis as a number |
+| `price_quantile` | Finds a quantile of one candle column in the range | `quantile = 0.5`, `column = "close"` | The quantile as a number |
+| `price_summary` | Summarises one candle column in the range with count, mean, spread and quartiles | `column = "close"` | A named numeric vector of summary statistics |
+| `price_histogram` | Draws a histogram of one candle column in the range with [`graphics::hist()`](https://rdrr.io/r/graphics/hist.html) | `bins = 50`, `column = "close"` | The `histogram` object [`graphics::hist()`](https://rdrr.io/r/graphics/hist.html) returns |
+| `volumes` | Fetches the traded volume of each candle in the range | none | A data frame with `exchange`, `segment`, `datetime`, `interval` and `volume` columns |
+| `volume_total` | Finds the total volume traded in the range | none | The total volume as a number |
+| `volume_high` | Finds the highest volume of any candle in the range | none | The highest volume as a number |
+| `volume_low` | Finds the lowest volume of any candle in the range | none | The lowest volume as a number |
+| `volume_mean` | Finds the mean volume per candle in the range | none | The mean volume as a number |
+| `volume_median` | Finds the median volume per candle in the range | none | The median volume as a number |
+| `volume_standard_deviation` | Finds the standard deviation of volume per candle in the range | none | The standard deviation as a number |
+| `volume_variance` | Finds the variance of volume per candle in the range | none | The variance as a number |
+| `volume_mean_absolute_deviation` | Finds the mean absolute deviation of volume per candle from its mean in the range | none | The mean absolute deviation as a number |
+| `volume_kurtosis` | Finds the kurtosis of volume per candle in the range | none | The kurtosis as a number |
+| `volume_skewness` | Finds the skewness of volume per candle in the range | none | The skewness as a number |
+| `volume_quantile` | Finds a quantile of volume per candle in the range | `quantile = 0.5` | The quantile as a number |
+| `volume_summary` | Summarises volume per candle in the range with count, mean, spread and quartiles | none | A named numeric vector of summary statistics |
+| `volume_histogram` | Draws a histogram of volume per candle in the range with [`graphics::hist()`](https://rdrr.io/r/graphics/hist.html) | `bins = 50` | The `histogram` object [`graphics::hist()`](https://rdrr.io/r/graphics/hist.html) returns |
+| `returns` | Calculates the fractional change of one candle column from each candle to the next | `column = "close"` | A data frame with `exchange`, `segment`, `datetime`, `interval` and `returns` columns |
+| `returns_high` | Finds the highest return of one candle column in the range | `column = "close"` | The highest return as a number |
+| `returns_low` | Finds the lowest return of one candle column in the range | `column = "close"` | The lowest return as a number |
+| `returns_mean` | Finds the mean return of one candle column in the range | `column = "close"` | The mean return as a number |
+| `returns_median` | Finds the median return of one candle column in the range | `column = "close"` | The median return as a number |
+| `returns_standard_deviation` | Finds the standard deviation of returns of one candle column in the range | `column = "close"` | The standard deviation as a number |
+| `returns_variance` | Finds the variance of returns of one candle column in the range | `column = "close"` | The variance as a number |
+| `returns_mean_absolute_deviation` | Finds the mean absolute deviation of returns of one candle column from their mean in the range | `column = "close"` | The mean absolute deviation as a number |
+| `returns_skewness` | Finds the skewness of returns of one candle column in the range | `column = "close"` | The skewness as a number |
+| `returns_kurtosis` | Finds the kurtosis of returns of one candle column in the range | `column = "close"` | The kurtosis as a number |
+| `returns_quantile` | Finds a quantile of returns of one candle column in the range | `quantile = 0.5`, `column = "close"` | The quantile as a number |
+| `returns_histogram` | Draws a histogram of returns of one candle column in the range with [`graphics::hist()`](https://rdrr.io/r/graphics/hist.html) | `bins = 50`, `column = "close"` | The `histogram` object [`graphics::hist()`](https://rdrr.io/r/graphics/hist.html) returns |
+| `returns_summary` | Summarises returns of one candle column in the range with count, mean, spread and quartiles | `column = "close"` | A named numeric vector of summary statistics |
+
+Each method follows the matching pandas reduction exactly, because base
+R’s defaults differ from pandas’ in several places. Missing values are
+skipped, as pandas skips them; the standard deviation and variance are
+sample figures, with n - 1 in the denominator; skewness and kurtosis use
+pandas’ adjusted formulas, giving 0 for constant values and `NA` when
+there are too few values; quantiles use linear interpolation,
+`stats::quantile(type = 7)`; and volumes are summed as doubles, because
+an R integer sum overflows above about 2.1 billion. On 2026-10-07 every
+method was compared with the Python library on four fixtures, and the
+largest relative difference was about 1e-13.
+
+The three summary methods return a named numeric vector with the names
+`count`, `mean`, `std`, `min`, `25%`, `50%`, `75%` and `max`, where the
+Python library returns a pandas Series with that index.
+`summary[["mean"]]` reads the same figure as Python’s `summary["mean"]`.
+
+**The histogram methods draw with base R graphics.**
+
+`price_histogram`, `volume_histogram` and `returns_histogram` draw with
+[`graphics::hist()`](https://rdrr.io/r/graphics/hist.html) on the
+current graphics device and return its `histogram` object invisibly,
+where the Python library draws with matplotlib and returns the
+matplotlib `Axes`. They need no extra package. The bins copy NumPy’s
+rules, so the bar heights and edges are the same as the Python
+library’s: a bar’s edges are `histogram$breaks[[bar]]` and
+`histogram$breaks[[bar + 1]]`, and its height is
+`histogram$counts[[bar]]`. When there is no screen, open a file device
+such as [`grDevices::png()`](https://rdrr.io/r/grDevices/png.html)
+first, and close it with
+[`grDevices::dev.off()`](https://rdrr.io/r/grDevices/dev.html)
+afterwards.
+
+The example below, which was not run for this article, summarises a year
+of RELIANCE’s daily returns.
+
+``` r
+
+reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+print(reliance$returns_standard_deviation(days = 365))
+print(reliance$returns_summary(days = 365))
+```
+
+## Statistic functions
+
+`StatisticFunctions` holds TA-Lib’s eight rolling statistic functions.
+Each works over a moving window and adds a column with one value per
+candle. The table below lists them.
+
+| Method | What it adds | Own arguments and defaults | TA-Lib function | Columns added |
+|----|----|----|----|----|
+| `beta` | Adds the rolling beta of the instrument against a benchmark, such as an index | `benchmark`, `window = 14`, `column = "close"` | `BETA` | `benchmark_<column>`, `beta_<window>` |
+| `correlation_coefficient` | Adds the rolling Pearson correlation of the instrument’s returns with a benchmark’s returns | `benchmark`, `window = 14`, `column = "close"` | `CORREL` | `benchmark_<column>`, `corr_<window>` |
+| `linear_regression` | Adds the end value of a rolling linear regression line through one candle column | `window = 14`, `column = "close"` | `LINEARREG` | `lin_regr_<window>` |
+| `linear_regression_slope` | Adds the slope of a rolling linear regression line through one candle column | `window = 14`, `column = "close"` | `LINEARREG_SLOPE` | `lin_regr_slope_<window>` |
+| `linear_regression_intercept` | Adds the intercept of a rolling linear regression line through one candle column | `window = 14`, `column = "close"` | `LINEARREG_INTERCEPT` | `lin_regr_int_<window>` |
+| `linear_regression_angle` | Adds the angle in degrees of a rolling linear regression line through one candle column | `window = 14`, `column = "close"` | `LINEARREG_ANGLE` | `lin_regr_angle_<window>` |
+| `standard_deviation` | Adds the rolling standard deviation of one candle column | `window = 14`, `standard_deviations = 1`, `column = "close"` | `STDDEV` | `std_dev_<window>` |
+| `variance` | Adds the rolling variance of one candle column | `window = 14`, `standard_deviations = 1`, `column = "close"` | `VAR` | `var_<window>` |
+
+`variance` passes `standard_deviations` to TA-Lib as it always has, but
+TA-Lib’s variance does not use it, so the argument has no effect there.
+
+The table below shows where each number comes from in R. The `talib`
+package bundles a newer TA-Lib, C 0.8.1, than the C 0.6.4 that Python’s
+`talib` links, and the newer library rewrote `CORREL`, `VAR` and
+`STDDEV`, so the correlation is computed by a base R copy of the 0.6.4
+loop, which also keeps 0.6.4’s handling of missing values. The `talib`
+package has no linear regression functions at all.
+
+| Method | Calculated by | Agreement with Python on 2026-10-07 |
+|----|----|----|
+| `beta` | [`talib::BETA`](https://serkor1.github.io/ta-lib-R/reference/rolling_beta.html) | Relative difference of 2.3e-12 at most |
+| `standard_deviation`, `variance` | [`talib::STDDEV`](https://serkor1.github.io/ta-lib-R/reference/rolling_standard_deviation.html), [`talib::VAR`](https://serkor1.github.io/ta-lib-R/reference/rolling_variance.html) | Relative differences of 5.4e-12 and 1.1e-11 at most |
+| `correlation_coefficient` | A base R copy of TA-Lib 0.6.4’s `TA_CORREL` loop | Identical |
+| the four `linear_regression` methods | A base R copy of TA-Lib 0.6.4’s `TA_LINEARREG` loop, one helper for all four | Identical |
+
+Python’s `talib` skips leading rows where an input is missing and pads
+the result, while the `talib` package passes them to the C code, which
+can then give wrong or empty results. Every method here therefore starts
+the calculation at the first complete row and pads the front with `NA`,
+as Python does. This matters for `correlation_coefficient`, whose first
+return is always missing.
+
+### Beta and correlation against a benchmark
+
+`beta` and `correlation_coefficient` compare the instrument with a
+second one, the benchmark, which is their first and required argument.
+The benchmark is usually an index, such as an `EquityIndex` for NIFTY,
+but any object with a `prices()` method works, such as an asset basket.
+The sequence below shows how the two sets of candles are matched.
+
+``` mermaid
+
+sequenceDiagram
+    autonumber
+    participant Y as Your code
+    participant S as share$beta
+    participant U as UBI
+    participant T as talib package
+    Y->>S: benchmark = nifty, window = 60, days = 365
+    S->>U: the share's candles
+    S->>U: the benchmark's candles, same range
+    U-->>S: two data frames
+    S->>S: match on datetime, keep only candles both have
+    S->>T: talib::BETA(benchmark close, share close, timePeriod = 60)
+    T-->>S: one beta per candle
+    S-->>Y: candles with benchmark_close and beta_60
+```
+
+A candle that only one side has, such as a day the stock was suspended
+while the index traded, is left out rather than filled in. The match
+keeps the instrument’s row order, as pandas’ inner merge does in the
+Python library; a benchmark with two candles at the same moment would
+give pandas two rows and R one. The benchmark’s column is kept as
+`benchmark_<column>`, so you can see what was compared.
+
+Two details make the numbers right. TA-Lib’s `BETA(x, y)` returns the
+beta of `y` measured against `x`, which is the reverse of what its
+documentation suggests, so the method passes the benchmark first; the
+`talib` package wraps the same C function, so the same holds in R. A
+check of the Python library on 2026-09-14 found 2.171 for INFY against
+NIFTY this way, matching a hand calculation, against 0.167 the other way
+round. And `correlation_coefficient` correlates returns rather than
+price levels, because two unrelated prices that both rise would
+otherwise look highly correlated.
+
+The example below, which was not run for this article, measures
+RELIANCE’s 60-day rolling beta against NIFTY.
+
+``` r
+
+reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+nifty <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")
+
+frame <- reliance$beta(benchmark = nifty, window = 60, days = 365)
+columns <- c(
+  "datetime",
+  "close",
+  "benchmark_close",
+  "beta_60"
+)
+print(tail(frame[, columns]))
+```
+
+## Math operators
+
+`MathOperators` holds TA-Lib’s ten math operators: arithmetic between
+two candle columns, and the highest and lowest values of one column over
+a rolling window. The table below lists them.
+
+| Method | What it adds | Own arguments and defaults | TA-Lib function | Columns added |
+|----|----|----|----|----|
+| `add` | Adds the sum of two candle columns | `first_column = "high"`, `second_column = "low"` | `ADD` | `sum` |
+| `subtract` | Adds the second candle column subtracted from the first | `first_column = "high"`, `second_column = "low"` | `SUB` | `difference` |
+| `multiply` | Adds the product of two candle columns | `first_column = "high"`, `second_column = "low"` | `MULT` | `product` |
+| `divide` | Adds the first candle column divided by the second | `first_column = "high"`, `second_column = "low"` | `DIV` | `quotient` |
+| `maximum` | Adds the highest value of one candle column over each window | `column = "close"`, `window = 10` | `MAX` | `max` |
+| `minimum` | Adds the lowest value of one candle column over each window | `column = "close"`, `window = 10` | `MIN` | `min` |
+| `maximum_index` | Adds the row position of the highest value of one candle column over each window | `column = "close"`, `window = 10` | `MAXINDEX` | `maxindex` |
+| `minimum_index` | Adds the row position of the lowest value of one candle column over each window | `column = "close"`, `window = 10` | `MININDEX` | `minindex` |
+| `minimum_maximum` | Adds the lowest and highest values of one candle column over each window | `column = "close"`, `window = 10` | `MINMAX` | `min`, `max` |
+| `minimum_maximum_index` | Adds the row positions of the lowest and highest values of one candle column over each window | `column = "close"`, `window = 10` | `MINMAXINDEX` | `minindex`, `maxindex` |
+
+Three details are worth knowing. The two-column methods default to
+`high` and `low`, so `subtract()` with no arguments gives each candle’s
+range. The rolling methods take `column` before `window`, the reverse of
+most analysis methods, so call them by name. And the index methods give
+positions counted from 0 for the first candle of the fetched range,
+exactly as the Python library does, so the row in an R data frame is the
+position plus 1; the rows before the first full window hold 0, because
+Python’s `talib` fills them with 0. `minimum_maximum` writes the same
+`min` and `max` columns as `minimum` and `maximum`, which only matters
+if you combine their data frames by hand.
+
+Every method in this group is computed in base R. The `talib` package
+has none of `ADD`, `SUB`, `MULT`, `DIV`, `MINMAX`, `MAXINDEX`,
+`MININDEX` or `MINMAXINDEX`, and its `MAX` and `MIN` come from the newer
+TA-Lib, which treats a missing value inside the data differently: for
+the values `1, 2, NA, 4, 5, 6, 7` with a window of 2,
+[`talib::MAX`](https://serkor1.github.io/ta-lib-R/reference/rolling_maximum.html)
+gave `NA, 2, 2, 4, 5, 6, 7` where Python’s `talib.MAX` gave
+`NaN, 2, 2, NaN, 5, 6, 7`, checked on 2026-10-07. The four arithmetic
+methods use R’s own operators, which are the same single operation as
+TA-Lib’s C code, and the rolling methods follow TA-Lib 0.6.4’s loops
+step by step, including how they break ties and treat missing values.
+Every value matched the Python library exactly. A window below 2 for the
+rolling methods signals an error naming TA-Lib’s `TA_BAD_PARAM`, as
+Python’s `talib` does.
+
+## Math transforms
+
+`MathTransforms` holds TA-Lib’s fifteen mathematical transforms of a
+single column. The table below lists them.
+
+| Method | What it adds | Own arguments and defaults | TA-Lib function | Columns added |
+|----|----|----|----|----|
+| `arc_cosine` | Adds the arc cosine of one candle column | `column = "close"` | `ACOS` | `acos` |
+| `arc_sine` | Adds the arc sine of one candle column | `column = "close"` | `ASIN` | `asin` |
+| `arc_tangent` | Adds the arc tangent of one candle column | `column = "close"` | `ATAN` | `atan` |
+| `ceiling` | Adds the ceiling of one candle column | `column = "close"` | `CEIL` | `ceil` |
+| `cosine` | Adds the cosine of one candle column | `column = "close"` | `COS` | `cos` |
+| `hyperbolic_cosine` | Adds the hyperbolic cosine of one candle column | `column = "close"` | `COSH` | `cosh` |
+| `exponential` | Adds the exponential of one candle column | `column = "close"` | `EXP` | `exp` |
+| `floor` | Adds the floor of one candle column | `column = "close"` | `FLOOR` | `floor` |
+| `natural_logarithm` | Adds the natural logarithm of one candle column | `column = "close"` | `LN` | `ln` |
+| `logarithm_base_10` | Adds the base 10 logarithm of one candle column | `column = "close"` | `LOG10` | `log10` |
+| `sine` | Adds the sine of one candle column | `column = "close"` | `SIN` | `sin` |
+| `hyperbolic_sine` | Adds the hyperbolic sine of one candle column | `column = "close"` | `SINH` | `sinh` |
+| `square_root` | Adds the square root of one candle column | `column = "close"` | `SQRT` | `sqrt` |
+| `tangent` | Adds the tangent of one candle column | `column = "close"` | `TAN` | `tan` |
+| `hyperbolic_tangent` | Adds the hyperbolic tangent of one candle column | `column = "close"` | `TANH` | `tanh` |
+
+The `talib` package has none of TA-Lib’s math transforms, so every
+method in this group calls the base R function that wraps the same C
+library function, such as [`acos()`](https://rdrr.io/r/base/Trig.html)
+or [`log10()`](https://rdrr.io/r/base/Log.html), which is all TA-Lib’s
+own C code does. On the fixture candles every value was identical to
+Python’s, including the infinities. Base R warns “NaNs produced” when
+[`acos()`](https://rdrr.io/r/base/Trig.html),
+[`asin()`](https://rdrr.io/r/base/Trig.html),
+[`log()`](https://rdrr.io/r/base/Log.html),
+[`log10()`](https://rdrr.io/r/base/Log.html) or
+[`sqrt()`](https://rdrr.io/r/base/MathFun.html) is given a value outside
+its domain, where C and Python stay silent, so those five methods
+compute only the values inside the domain and fill the rest with `NaN`,
+which gives the same column without a warning.
+
+**Most of these are meaningless on raw prices.**
+
+Arc cosine and arc sine are defined only between -1 and 1, so on a price
+of about a thousand rupees their columns are entirely empty.
+`exponential`, `hyperbolic_cosine` and `hyperbolic_sine` overflow to
+infinity for any value above about 710: over ten years of INFY’s
+adjusted closes, 1,586 of 1,654 rows were infinite. The transforms are
+meant for columns that are already small. Note that `column` must name a
+column of the candles themselves, so a transform of returns needs the
+returns added to the data frame first.
+
+## Price transforms
+
+`PriceTransforms` holds TA-Lib’s four price transforms, each of which
+combines a candle’s prices into one representative figure. They take no
+arguments of their own. The table below lists them.
+
+| Method | What it adds | Own arguments and defaults | TA-Lib function | Columns added |
+|----|----|----|----|----|
+| `average_price` | Adds the average of each candle’s open, high, low and close | none | `AVGPRICE` | `avg_price` |
+| `median_price` | Adds the midpoint of each candle’s high and low | none | `MEDPRICE` | `med_price` |
+| `typical_price` | Adds the average of each candle’s high, low and close | none | `TYPPRICE` | `typ_price` |
+| `weighted_close` | Adds each candle’s weighted close, which counts the close twice alongside the high and low | none | `WCLPRICE` | `wght_close` |
+
+`average_price` here is TA-Lib’s average of each candle’s open, high,
+low and close. It is unrelated to the `average_price` field in UBI’s
+quote, which is the day’s volume weighted average price and is read
+through the `volume_weighted_average_price` active binding of
+`TradeableInstrument`. On 2026-09-26 the Python library’s property
+returned 1220.44 for RELIANCE.
+
+The four price transforms call the `talib` package’s `AVGPRICE`,
+`MEDPRICE`, `TYPPRICE` and `WCLPRICE`, and on 2026-10-07 their values
+matched the Python library’s within a relative difference of about
+1e-13.

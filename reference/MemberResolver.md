@@ -48,7 +48,7 @@ Initialises the resolver with the client it sends requests through.
 
 #### Details
 
-Errors: signals `ValueError` when no client was given and the shared
+Errors: signals a plain error when no client was given and the shared
 client's base url or MongoDB credentials are not configured.
 
 #### Returns

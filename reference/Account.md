@@ -58,12 +58,13 @@ Initialises the account with the client it sends requests through.
 - `unified_broker_interface`:
 
   The `UnifiedBrokerInterface` to use, or `NULL` to share the one every
-  instrument uses, which is almost always right because a second client
-  would log the instruments out.
+  instrument uses, which is almost always right because one shared
+  client keeps one cached access token and one place that reconnects
+  after HTTP 401.
 
 #### Details
 
-Errors: signals `ValueError` when no client was given and the shared
+Errors: signals a plain error when no client was given and the shared
 client's base url or MongoDB credentials are not configured.
 
 #### Returns

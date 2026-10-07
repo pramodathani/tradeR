@@ -265,7 +265,7 @@ is not marked.
 
 #### Details
 
-Errors: signals a plain error when `data` has no column named
+Errors: signals `KeyError` when `data` has no column named
 `first_column` or `second_column`.
 
 #### Returns
@@ -343,7 +343,7 @@ is not marked.
 
 #### Details
 
-Errors: signals a plain error when `data` has no column named
+Errors: signals `KeyError` when `data` has no column named
 `first_column` or `second_column`.
 
 #### Returns

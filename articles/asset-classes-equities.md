@@ -1,0 +1,426 @@
+# Equities
+
+The equity family covers shares, stock market indices, and the futures
+and options written on each of them. It lives in `R/assets_equities.R`
+and has six classes, one for each of UBI’s equity segments. It is the
+family where the most works: every class that resolves an instrument has
+a live quote, shares and indices have candles, five of the six classes
+can be ordered, and `Equity` can be held.
+
+The table below lists the six classes and what identifies one contract
+of each.
+
+| Kind | Class | What it is | UBI segment | Named by |
+|----|----|----|----|----|
+| class | [`Equity`](#a-share) | A share, such as RELIANCE | `equities` | `exchange`, `symbol` |
+| class | [`EquityFutures`](#futures-and-options) | A future on a share | `equity_futures` | `exchange`, `underlying_symbol`, `expiry_date` |
+| class | [`EquityOption`](#futures-and-options) | An option on a share | `equity_options` | `exchange`, `underlying_symbol`, `expiry_date`, `strike_price`, `option_type` |
+| class | [`EquityIndex`](#an-index) | A stock market index, such as NIFTY | `equity_indices` | `exchange`, `symbol` |
+| class | [`EquityIndexFutures`](#futures-and-options) | A future on an index | `equity_index_futures` | `exchange`, `underlying_symbol`, `expiry_date` |
+| class | [`EquityIndexOption`](#futures-and-options) | An option on an index | `equity_index_options` | `exchange`, `underlying_symbol`, `expiry_date`, `strike_price`, `option_type` |
+
+## How the six classes are built
+
+`EquityIndex` is built on
+[`NonTradeableInstrument`](https://pramodathani.github.io/tradeR/reference/NonTradeableInstrument.md),
+because an index is a number the exchange publishes rather than
+something you can buy. The other five can be traded, so they carry the
+order book, the order methods, the price wrappers and the position
+members. `Equity` is built on
+[`TradeableInstrument`](https://pramodathani.github.io/tradeR/reference/TradeableInstrument.md)
+directly and alone adds the holdings members. The four derivative
+classes are built on the [derivative base
+classes](https://pramodathani.github.io/tradeR/articles/guide-derivatives.md),
+which add the expiry, underlying, basis and greeks members, so each
+derivative class adds only its segment and its discovery functions. The
+discovery functions live on each class’s generator, such as
+`EquityOption$chain()`, because R6 generators do not inherit functions
+from their parents. The class diagram below shows this.
+
+``` mermaid
+
+classDiagram
+    direction BT
+    class Instrument {
+        prices()
+        quote
+        last_price
+        ohlc
+        209 analysis methods
+    }
+    class TradeableInstrument {
+        order book values
+        place_order()
+        price wrappers
+        position members
+    }
+    class Equity {
+        holdings members
+        generator search()
+    }
+    class NonTradeableInstrument {
+        constituents
+    }
+    class EquityIndex {
+        generator search()
+    }
+    class Derivative {
+        expiry and underlying members
+    }
+    class Futures {
+        basis members
+    }
+    class Option {
+        moneyness, greeks()
+    }
+    class IndexFutures
+    class IndexOption
+    class EquityFutures {
+        generator expiries()
+        generator contracts()
+    }
+    class EquityIndexFutures {
+        generator expiries()
+        generator contracts()
+    }
+    class EquityOption {
+        generator expiries()
+        generator strikes()
+        generator chain()
+    }
+    class EquityIndexOption {
+        generator expiries()
+        generator strikes()
+        generator chain()
+    }
+    TradeableInstrument --|> Instrument
+    NonTradeableInstrument --|> Instrument
+    Equity --|> TradeableInstrument
+    Derivative --|> TradeableInstrument
+    Futures --|> Derivative
+    Option --|> Derivative
+    IndexFutures --|> Futures
+    IndexOption --|> Option
+    EquityFutures --|> Futures
+    EquityOption --|> Option
+    EquityIndexFutures --|> IndexFutures
+    EquityIndexOption --|> IndexOption
+    EquityIndex --|> NonTradeableInstrument
+```
+
+## Naming a contract
+
+Every identity argument is required, and the constructor accepts only
+the fields that identify one of its own contracts. The four derivative
+classes also take an optional `underlying`, an instrument object the
+contract keeps, as [How a derivative finds its
+underlying](#how-a-derivative-finds-its-underlying) explains. Every
+constructor also takes an optional `unified_broker_interface`, the
+client to send requests through, which defaults to the one client all
+instruments share. A share takes an exchange and a symbol, a future adds
+nothing to that but swaps the symbol for its underlying’s symbol and an
+expiry date, and an option also takes a strike price and an option type,
+`CE` for a call or `PE` for a put. The exchange is written in lower
+case, such as `nse` or `bse`.
+
+Leaving out a field fails at once, in R, before any request is sent: R
+signals its own error, such as
+`argument "symbol" is missing, with no default`. Asking for something
+UBI does not have fails one request later with the class’s own error
+condition, such as `EquityOptionError`, whose `parent` field holds the
+general `InstrumentError` carrying UBI’s own message. Asking one class
+for another’s instrument, such as
+`Equity$new(exchange = "nse", symbol = "NIFTY")`, fails the same way,
+because the class fixes its segment and UBI finds no share called NIFTY.
+
+The code below builds one contract of each kind. It is the module’s own
+usage example from the Python library, translated to R and extended to
+the futures classes.
+
+``` r
+
+library(tradeR)
+
+share <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+nifty <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")
+
+future <- EquityFutures$new(
+  exchange = "nse",
+  underlying_symbol = "RELIANCE",
+  expiry_date = "2026-09-29"
+)
+option <- EquityIndexOption$new(
+  exchange = "nse",
+  underlying_symbol = "NIFTY",
+  expiry_date = "2026-09-29",
+  strike_price = 25000,
+  option_type = "CE"
+)
+```
+
+## A share
+
+An [`Equity`](https://pramodathani.github.io/tradeR/reference/Equity.md)
+is a share on the nse or the bse. The example below builds RELIANCE and
+reads its identity fields, its last ten days of candles and its last
+price.
+
+``` r
+
+reliance <- Equity$new("nse", "RELIANCE")
+print(reliance)
+reliance$instrument_id
+reliance$segment
+reliance$lot_size
+reliance$tick_size
+reliance$carried_by
+reliance$prices(days = 10)
+reliance$last_price
+```
+
+The output of the Python version of this example was captured from a
+local UBI on Saturday 2026-09-26, when the market was closed, so the
+price was Friday’s close. It is not shown here, because R prints
+differently, but the values it recorded are described below. The
+instrument printed as
+`Equity(exchange='nse', segment='nse_equities', symbol='RELIANCE')`. Its
+`instrument_id` was `3f92570a-9924-5bf5-9f9d-e006cd9f4202`, its `shape`
+was `security`, its `lot_size` was 1 and its `tick_size` was 0.1, and
+its `carried_by` list, which names every broker that carries the share,
+had nine entries, such as Dhan with broker token `2885` and Zerodha with
+broker token `738561` and order symbol `RELIANCE`. The capture’s
+`mapping_date` was 2026-09-26, its `first_seen_date` 2026-08-07 and its
+`last_seen_date` 2026-09-26. The candles came back as six daily rows
+starting on 2026-09-16, with the columns `exchange`, `segment`,
+`interval`, `datetime`, `open`, `high`, `low`, `close`, `volume`, `oi`
+and `price_factor`, and the last price was 1226.0.
+
+The candles carry a `price_factor` column because a share’s prices are
+adjusted for splits and bonuses by default;
+[`prices()`](https://pramodathani.github.io/tradeR/articles/guide-market-data.html#prices)
+explains the columns and UBI’s page on [adjusted and unadjusted
+prices](https://pramodathani.github.io/unified_broker_interface/rest-api/historical-data/#adjusted-unadjusted-and-as-served)
+explains the adjustment. The same capture asked for
+`prices(interval = "5minute", days = 1)` and got nothing, which is
+`NULL` in R, because intraday candles are loaded into UBI by hand and
+none had been loaded for RELIANCE.
+
+### Holding a share
+
+`Equity` is the only class in this family with the holdings members,
+because a share is the only equity contract that can be kept in the
+demat account. A future or an option leaves a position rather than a
+holding, and an index cannot be held at all. The table below lists the
+six members, which are documented in full on the
+[Holdings](https://pramodathani.github.io/tradeR/articles/guide-holdings.md)
+page.
+
+| Kind | Member | Description |
+|----|----|----|
+| active binding | `holdings` | This share’s row from the account’s holdings, or `NULL` when it is not held |
+| active binding | `holdings_value` | What the holding is worth, as UBI prices it |
+| active binding | `holdings_pnl` | The holding’s `day_change`, `day_change_percentage` and `unrealized` profit |
+| places orders | `add_to_holdings()` | Buys more, always as a `cnc` order |
+| places orders | `reduce_holdings()` | Sells part of the shares that are free to sell |
+| places orders | `liquidate_holdings()` | Sells every share that is free to sell |
+
+Two details matter in practice. The three order methods always send the
+`cnc` product, because selling a holding as `mis` would open an intraday
+short position beside the shares instead of selling them. And the shares
+free to sell are the holding minus any shares pledged as collateral, so
+`reduce_holdings()` refuses a quantity larger than that with
+`HoldingError`. The RELIANCE capture above found RELIANCE not held, so
+`holdings` returned nothing, which is `NULL` in R.
+
+## An index
+
+An
+[`EquityIndex`](https://pramodathani.github.io/tradeR/reference/EquityIndex.md)
+has a live level and candles, so every analysis method works on it, but
+it has no order book and no order methods. It is also the usual
+benchmark for
+[`beta()`](https://pramodathani.github.io/tradeR/articles/analysis-statistics.md)
+and for the [performance
+measures](https://pramodathani.github.io/tradeR/articles/analysis-performance.md),
+and the Python library checked `beta` against NIFTY’s candles on
+2026-09-14. Its
+[`constituents`](https://pramodathani.github.io/tradeR/articles/guide-asset-baskets.html#an-index-or-a-fund-is-two-things)
+active binding, which every index class inherits from
+`NonTradeableInstrument`, returns the stored basket of the index’s
+members, or `NULL` when none has been stored; UBI stores no
+constituents, so they are kept in this project’s MongoDB. The example
+below searches the nse’s indices for names containing NIFTY, with
+`limit = 5`.
+
+``` r
+
+matches <- EquityIndex$search("nse", "NIFTY", limit = 5)
+print(matches)
+```
+
+When the Python version was captured from a local UBI on 2026-09-26, the
+search returned five rows, each with the columns `exchange`,
+`expiry_date`, `instrument_id`, `option_type`, `segment`, `shape`,
+`strike_price`, `symbol` and `underlying_symbol`. The five symbols were
+`NIFTY`, `NIFTY 100`, `NIFTY 200`, `NIFTY 500` and `NIFTY ALPHA 50`, all
+in the segment `nse_equity_indices` with the shape `security`; the
+first, `NIFTY`, had the `instrument_id`
+`dba60324-760b-53cc-aeae-a4bb4defd1bc`. In R, the result is a data frame
+with the same columns, and the fields that do not apply to an index are
+`NA`.
+
+The index the exchange publishes as “NIFTY 50” is stored by UBI as
+`NIFTY`, which is the name its futures and options use as their
+underlying symbol. The section on [how a derivative finds its
+underlying](#how-a-derivative-finds-its-underlying) explains why that
+matters.
+
+The same search on shares, `Equity$search("nse", "RELI", limit = 5)`,
+returned four rows in the same capture: RELIABLE, RELIANCE, RELIGARE and
+RELINFRA.
+
+## Futures and options
+
+The four derivative classes are named by their underlying symbol, their
+expiry date and, for options, a strike and an option type. You rarely
+know those by heart, so each class’s generator offers discovery
+functions that read UBI’s full instrument list for its own segment and
+return what is live. [Finding
+instruments](https://pramodathani.github.io/tradeR/articles/guide-discovery.md)
+documents them; the table below says which class has which.
+
+| Class | `expiries` | `contracts` | `strikes` | `chain` |
+|----|:--:|:--:|:--:|:--:|
+| `EquityFutures`, `EquityIndexFutures` | yes | yes | no | no |
+| `EquityOption`, `EquityIndexOption` | yes | no | yes | yes |
+
+The example below walks from the NIFTY index to its option chain for the
+nearest expiry, and then lists the expiries of the RELIANCE futures.
+
+``` r
+
+expiries <- EquityIndexOption$expiries("nse", "NIFTY")
+strikes <- EquityIndexOption$strikes("nse", "NIFTY", expiries[1])
+chain <- EquityIndexOption$chain("nse", "NIFTY", expiries[1])
+
+print(EquityFutures$expiries("nse", "RELIANCE"))
+```
+
+When the Python version was captured from a local UBI on 2026-09-26, the
+NIFTY options were listed for eighteen expiries, from 2026-09-29 through
+weekly and monthly dates to 2031-06-24. The nearest expiry had 269
+strikes, from 1500 to 49500, and its chain had 538 rows, which are the
+269 strikes as calls and puts, sorted by strike and then option type, so
+the first rows were the 1500 call and the 1500 put. The RELIANCE futures
+were listed for three expiries: 2026-09-29, 2026-10-27 and 2026-11-23.
+In R, `expiries` is a `Date` vector, `strikes` is a numeric vector and
+`chain` is a data frame.
+
+The discovery functions return rows of identities, not instrument
+objects. Building 538 objects would send 538 lookups to UBI, so you take
+the two or three rows you want and build those. A row’s identity fields
+rebuild the same instrument: on 2026-09-20 a row from the middle of the
+RELIANCE chain was turned into an `EquityOption`, and UBI returned the
+very `instrument_id` the row carried.
+
+Single-stock options are slower to discover than index options. Each
+call downloads the whole `nse_equity_options` segment, which held
+125,967 rows on 2026-09-20 and took about two seconds, against a quarter
+of a second for the 14,826 rows of index options.
+
+The six contracts below were built and checked against UBI on
+2026-09-20, which shows the lot and tick sizes you can expect. The
+prices are that day’s and are here only to show that each class was
+quoted.
+
+| Class | Contract | Segment | `lot_size` | `tick_size` | `last_price` |
+|----|----|----|----|----|----|
+| `Equity` | RELIANCE | `nse_equities` | 1 | 0.1 | 1226.4 |
+| `EquityFutures` | RELIANCE 2026-09-29 | `nse_equity_futures` | 500 | 0.1 | 1242.0 |
+| `EquityOption` | RELIANCE 2026-09-29 1250 CE | `nse_equity_options` | 500 | 0.05 | 11.95 |
+| `EquityIndex` | NIFTY | `nse_equity_indices` | 1 | 0.05 | 23346.4 |
+| `EquityIndexFutures` | NIFTY 2026-09-29 | `nse_equity_index_futures` | 65 | 0.1 | 23380.0 |
+| `EquityIndexOption` | NIFTY 2026-09-29 23350 CE | `nse_equity_index_options` | 65 | 0.05 | 171.1 |
+
+An equity order is a securities-market order, so its quantity is a plain
+count of shares, and for a derivative it must be a whole number of the
+chosen broker’s lot size.
+[Orders](https://pramodathani.github.io/tradeR/articles/guide-orders.html#place_order)
+explains the rest.
+
+Once built, a contract reports what it is as a contract: its days to
+expiry, whether it is a weekly or monthly expiry, its underlying’s
+price, a future’s basis over it, and an option’s moneyness, implied
+volatility and greeks. Equities are the one family where all of these
+work, because UBI quotes shares and indices;
+[Derivatives](https://pramodathani.github.io/tradeR/articles/guide-derivatives.md)
+documents each member with values captured from NIFTY and RELIANCE
+contracts.
+
+## How a derivative finds its underlying
+
+A RELIANCE option does not hold its RELIANCE `Equity` unless you give it
+one. Give it when you build the contract, as
+`EquityOption$new("nse", "RELIANCE", "2026-10-27", 1200, "CE", underlying = reliance)`,
+and its
+[`underlying`](https://pramodathani.github.io/tradeR/articles/guide-derivatives.html#underlying)
+returns that very object and its
+[`underlying_price`](https://pramodathani.github.io/tradeR/articles/guide-derivatives.html#underlying_price)
+reads that object’s last price. Only a given object is stored. Without
+one, the contract looks its underlying up again on every read, in the
+order
+[Derivatives](https://pramodathani.github.io/tradeR/articles/guide-derivatives.html#how-a-contract-finds-its-underlying)
+describes. It first tries UBI’s `underlying_instrument_id`, which UBI
+resolves from the brokers’ own underlying codes, and then falls back to
+the equity family’s default, which is the share or index whose `symbol`
+equals the contract’s `underlying_symbol`. Either way the lookup returns
+a plain `TradeableInstrument` or, for an index, a
+`NonTradeableInstrument`, never an `Equity` or an `EquityIndex`. Giving
+the underlying is still the reliable way, because it costs no request
+and cannot fail.
+
+The fallback matches strings, not keys. The flowchart below shows how
+that string match works for a share and for an index, and where it can
+fail.
+
+``` mermaid
+
+flowchart LR
+    O["EquityOption<br/>underlying_symbol RELIANCE"] -->|"same string"| S["Equity<br/>symbol RELIANCE"]
+    I["EquityIndexOption<br/>underlying_symbol NIFTY"] -->|"same string"| N["EquityIndex<br/>symbol NIFTY"]
+    P["Exchange name<br/>NIFTY 50"] -->|"UBI alias table"| N
+    Q["An index missing<br/>from the alias table"] -.->|"may not match"| X["no EquityIndex found"]
+```
+
+For shares the match holds, because UBI strips the exchange’s series
+suffix, such as `-EQ`, from NSE symbols when it builds its instrument
+list. For indices it depends on an alias table in UBI that rewrites the
+published names onto the derivative names, so Zerodha’s `NIFTY 50` row
+is stored as `NIFTY` and its `NIFTYBANK` row as `BANKNIFTY`. The table
+covers NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY and NIFTYNXT50. An index
+outside it may not match by name, and when UBI gives no link either, the
+lookup signals
+[`UnderlyingError`](https://pramodathani.github.io/tradeR/articles/guide-errors.html#underlyingerror)
+at the moment it is read, which is why passing the `EquityIndex`
+yourself is safer. The live check of the Python library on 2026-09-28
+resolved both RELIANCE and NIFTY either way.
+
+## Errors
+
+The table below lists what each constructor signals. Every error
+condition except R’s own missing-argument error carries the class
+`InstrumentError` as well as its own, so
+`tryCatch(..., InstrumentError = function(error) ...)` catches them all,
+and
+[Errors](https://pramodathani.github.io/tradeR/articles/guide-errors.md)
+documents each class.
+
+| Condition | When |
+|----|----|
+| R’s error `argument "..." is missing, with no default` | A required identity argument is missing. R signals it before any request is sent. |
+| `EquityError` | UBI has no share with that exchange and symbol, including an index asked for as a share. |
+| `EquityFuturesError` | UBI has no share future with that underlying and expiry. |
+| `EquityOptionError` | UBI has no share option with those five fields, such as an impossible strike. |
+| `EquityIndexError` | UBI has no index with that exchange and symbol, including a share asked for as an index. |
+| `EquityIndexFuturesError` | UBI has no index future with that underlying and expiry. |
+| `EquityIndexOptionError` | UBI has no index option with those five fields. |

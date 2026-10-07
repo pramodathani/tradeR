@@ -1,8 +1,48 @@
 pandoc: 3.8.3
 pkgdown: 2.2.1
 pkgdown_sha: ~
-articles: {}
-last_built: 2026-10-07T18:01Z
+articles:
+  articles/analysis-indicators: analysis-indicators.html
+  articles/analysis-patterns: analysis-patterns.html
+  articles/analysis-performance: analysis-performance.html
+  articles/analysis-signals-and-backtests: analysis-signals-and-backtests.html
+  articles/analysis-statistics: analysis-statistics.html
+  articles/analysis: analysis.html
+  articles/architecture-design-choices: architecture-design-choices.html
+  articles/architecture-instrument-model: architecture-instrument-model.html
+  articles/architecture-order-engine: architecture-order-engine.html
+  articles/architecture: architecture.html
+  articles/asset-classes-commodities: asset-classes-commodities.html
+  articles/asset-classes-currencies: asset-classes-currencies.html
+  articles/asset-classes-equities: asset-classes-equities.html
+  articles/asset-classes-fixed-income: asset-classes-fixed-income.html
+  articles/asset-classes-funds: asset-classes-funds.html
+  articles/asset-classes-mutual-funds: asset-classes-mutual-funds.html
+  articles/asset-classes: asset-classes.html
+  articles/get-started-configuration: get-started-configuration.html
+  articles/get-started-first-steps: get-started-first-steps.html
+  articles/get-started-installation: get-started-installation.html
+  articles/get-started: get-started.html
+  articles/guide-account: guide-account.html
+  articles/guide-asset-baskets: guide-asset-baskets.html
+  articles/guide-client: guide-client.html
+  articles/guide-derivatives: guide-derivatives.html
+  articles/guide-discovery: guide-discovery.html
+  articles/guide-errors: guide-errors.html
+  articles/guide-holdings: guide-holdings.html
+  articles/guide-instruments: guide-instruments.html
+  articles/guide-market-data: guide-market-data.html
+  articles/guide-orders: guide-orders.html
+  articles/guide-positions: guide-positions.html
+  articles/guide-price-wrappers: guide-price-wrappers.html
+  articles/guide-synthetic-orders: guide-synthetic-orders.html
+  articles/guide-vocabulary: guide-vocabulary.html
+  articles/guide: guide.html
+  articles/project-adding-an-asset-class: project-adding-an-asset-class.html
+  articles/project-structure: project-structure.html
+  articles/project-writing-docs: project-writing-docs.html
+  articles/project: project.html
+last_built: 2026-10-07T18:19Z
 urls:
   reference: https://pramodathani.github.io/tradeR/reference
   article: https://pramodathani.github.io/tradeR/articles

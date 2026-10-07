@@ -1,0 +1,951 @@
+# Placing and reading orders
+
+Every instrument that can be traded carries the members on this page.
+Five of them send orders to UBI, which passes them on to a broker, six
+read this instrument’s own rows out of the day’s order book and trade
+book, and four read the order engine’s parents, which are the synthetic
+orders and held limit orders UBI is working. An index cannot be traded,
+so `EquityIndex` and the other index classes have none of these members.
+Every member on this page is defined on
+[TradeableInstrument](https://pramodathani.github.io/tradeR/reference/TradeableInstrument.md),
+and every tradeable class, such as `Equity` or `CommodityFutures`,
+inherits it.
+
+**These are real orders.**
+
+The members marked “places orders” send orders through UBI to real
+brokers, with real money. UBI does not check the market’s hours, and a
+broker that accepts an order can still see it filled within
+milliseconds. Pass `dry_run = TRUE` to `place_order()`, `modify_order()`
+or `cancel_order()` first: UBI then builds the exact request it would
+send to the broker and returns it without sending anything.
+
+The table below lists the fifteen members this page documents.
+
+| Kind | Member | Description |
+|----|----|----|
+| places orders | [`place_order()`](#place_order) | Places one order in this instrument through UBI. |
+| places orders | [`modify_order()`](#modify_order) | Changes one pending order through UBI. |
+| places orders | [`cancel_order()`](#cancel_order) | Cancels one pending order through UBI. |
+| places orders | [`cancel_open_orders()`](#cancel_open_orders) | Cancels every order in this instrument that is still waiting, whether at a broker or held in UBI’s order engine. |
+| places orders | [`cancel_parent()`](#cancel_parent) | Cancels one of the order engine’s parents, with every leg it still has resting at a broker. |
+| active binding | [`orders`](#orders) | Every one of today’s orders in this instrument, whatever its status. |
+| active binding | [`open_orders`](#open_orders) | Today’s orders in this instrument that can still be changed. |
+| active binding | [`completed_orders`](#completed_orders) | Today’s orders in this instrument that filled in full. |
+| active binding | [`rejected_orders`](#rejected_orders) | Today’s orders in this instrument that a broker or the exchange refused. |
+| active binding | [`cancelled_orders`](#cancelled_orders) | Today’s orders in this instrument that were cancelled. |
+| active binding | [`trades`](#trades) | Today’s trades in this instrument. |
+| active binding | [`parents`](#parents) | This instrument’s synthetic orders and held orders that the order engine has not finished. |
+| method | [`parent()`](#parent) | Reads one of the order engine’s parents, whether or not it has finished. |
+| method | [`parent_orders()`](#parent_orders) | Today’s broker orders that one parent placed. |
+| method | [`parent_trades()`](#parent_trades) | Today’s trades in the broker orders that one parent placed. |
+
+Placing an order through a named price, such as “buy at the best bid”,
+has its own page, [Price
+wrappers](https://pramodathani.github.io/tradeR/articles/guide-price-wrappers.md).
+Changing a position without saying which side you are on is on
+[Positions](https://pramodathani.github.io/tradeR/articles/guide-positions.md),
+and the fifty-four order types UBI builds out of ordinary orders are on
+[Synthetic
+orders](https://pramodathani.github.io/tradeR/articles/guide-synthetic-orders.md).
+All of them end in `place_order()`.
+
+## Glossary of plain strings
+
+The package passes the order vocabulary to UBI as plain lower-case
+strings, with no constants and no factor levels, because UBI already
+checks every value and answers HTTP 400 with a clear message when one is
+wrong. UBI ignores case, so `"buy"` and `"BUY"` are the same. The table
+below lists the values these members accept and return;
+[Vocabulary](https://pramodathani.github.io/tradeR/articles/guide-vocabulary.md)
+has the full list for the whole package.
+
+| Parameter | Values | Meaning |
+|----|----|----|
+| `transaction_type` | `buy`, `sell` | The side of the order. |
+| `order_type` | `market` | Fill at whatever price the market offers. Takes no price. |
+|  | `limit` | Fill at the price given or better. Needs a price. |
+|  | `sl` | A stop-loss limit: waits for the trigger price, then rests a limit. Needs a price and a trigger price. |
+|  | `sl-m` | A stop-loss market: waits for the trigger price, then sends a market order. Needs a trigger price and takes no price. |
+| `product` | `cnc` | Delivery. A buy puts shares in the demat account. |
+|  | `mis` | Intraday. The broker closes the position before the session ends. |
+|  | `nrml` | Carry forward, for futures and options held overnight. |
+| `validity` | `day`, `ioc` | Good for the day, or immediate-or-cancel. UBI uses `day` when none is given. |
+| `status` (returned) | `PENDING`, `OPEN`, `COMPLETE`, `CANCELLED`, `REJECTED`, `EXPIRED` | UBI’s own upper-case status of an order. |
+| `outcome` (returned) | `accepted`, `rejected`, `unknown`, `partial`, `armed` | What happened to the request. `partial` means some of the orders of a type that sends several at once were accepted and some were not. `armed` means the order engine is holding the order, waiting for a price or a time. |
+
+UBI ties the price fields to the order type, and the package does not
+check this before sending. The table below shows the rule, which you
+will otherwise meet as a `BadRequestError`.
+
+| `order_type` |    `price`     | `trigger_price` |
+|--------------|:--------------:|:---------------:|
+| `market`     | must be absent | must be absent  |
+| `limit`      |    required    | must be absent  |
+| `sl`         |    required    |    required     |
+| `sl-m`       | must be absent |    required     |
+
+A `price_reference` stands in for `price`, and a `quantity_reference`
+stands in for `quantity`. Both are described under
+[`place_order()`](#place_order).
+
+## Nothing is checked before sending
+
+The package sends the price and the quantity to UBI exactly as you give
+them. It does not round a price to the tick size, it does not check that
+a quantity is a whole number of lots, and it does not check that the
+market is open. UBI and the broker behind it hold those rules, and their
+refusal is the most accurate message you can get. The consequence is
+that the error you see comes from UBI, as one of the conditions on the
+[Errors](https://pramodathani.github.io/tradeR/articles/guide-errors.md)
+page.
+
+Quantities are always in units, never in lots. An MCX gold future has a
+lot of 100, so one lot is `quantity = 100`, and `quantity = 1` is
+refused with HTTP 400.
+
+## How an order travels
+
+The sequence below follows one order that carries a `price_reference`,
+from your code to the broker and back. Every order takes this path
+through UBI’s order engine, which has placed every order since UBI
+removed its direct placement mode on 2026-09-27.
+
+``` mermaid
+
+sequenceDiagram
+    autonumber
+    participant P as Your program
+    participant I as TradeableInstrument
+    participant C as Shared client
+    participant A as UBI API worker
+    participant E as UBI order engine
+    participant B as Broker
+    P->>I: place_order with a price_reference
+    I->>C: the body
+    C->>A: POST /api/orders/place
+    A->>A: check the body and resolve the instrument
+    A->>E: intent on the Redis stream
+    E->>E: read the quote, work the price out, round it to the tick
+    E->>B: the broker's own order request
+    B-->>E: order id
+    E-->>A: answer on the intent's list
+    A-->>C: 200 with order_id, intent_id and parent_id
+    C-->>I: answer
+    I-->>P: the answer as a named list
+```
+
+A plain `day` limit order with a price of its own stops at step 6: the
+engine holds it, answers at once with HTTP 202 and an `outcome` of
+`armed`, and sends it only when the book reaches its price. [Order
+engine](https://pramodathani.github.io/tradeR/articles/architecture-order-engine.html#plain-limit-orders-are-held)
+explains that, and UBI’s page on the [order
+engine](https://pramodathani.github.io/unified_broker_interface/rest-api/order-engine/)
+describes the engine itself.
+
+## place_order
+
+The method’s signature is shown below. It places orders, and it sends
+`POST /api/orders/place`.
+
+``` r
+
+place_order(
+  transaction_type,
+  order_type,
+  quantity,
+  product,
+  price = NULL,
+  trigger_price = NULL,
+  validity = NULL,
+  disclosed_quantity = NULL,
+  after_market = FALSE,
+  tag = NULL,
+  dry_run = FALSE,
+  price_reference = NULL,
+  quantity_reference = NULL,
+  synthetic = NULL
+)
+```
+
+This method places one order in this instrument. You never name a
+broker: UBI chooses one from the brokers that carry the instrument and
+can take the order, and the answer says which it chose. Every optional
+field left as `NULL` is left out of the request entirely, rather than
+sent as zero, because UBI treats a missing price and a zero price
+differently.
+
+An answer with an `outcome` of `accepted` means the broker took the
+order, not that the order survived. The exchange can still refuse it a
+moment later, which is what happens to an ordinary order sent while the
+market is closed, so read its real fate from [`orders`](#orders). To
+queue an order for the next session, pass `after_market = TRUE`.
+
+The last three parameters describe something for UBI to work out instead
+of stating it. A `price_reference` names a price, such as “the second
+best offer”, which UBI reads from the live quote and rounds to the tick
+when it sends the order. A `quantity_reference` names a quantity, such
+as “the whole position”, which UBI reads from the account’s positions. A
+`synthetic` named list turns the order into one of UBI’s fifty-four
+synthetic order types.
+
+A plain `limit` order with a price of its own, `day` validity and no
+`synthetic` list is held by UBI’s order engine rather than sent, until
+the other side of the book reaches its price. The answer then has an
+`outcome` of `armed`, a `parent_id` and no `order_id`, and the order is
+found in [`parents`](#parents) rather than in `orders`. Pass
+`synthetic = list(type = "simple")` to send a limit order at once, which
+an instrument with no live quote needs, because its held order would
+never be sent.
+
+A plain `market` order that is not after-market is not sent as a market
+order either. The engine runs it as a `marketable_limit`, a `limit` two
+ticks past the other side’s best price that follows that price until it
+fills and is cancelled after 30 seconds, and refuses it with HTTP 409
+when nobody is on the other side of the book or the quote is missing or
+stale. `synthetic = list(type = "simple")` sends a real market order.
+[Order
+engine](https://pramodathani.github.io/tradeR/articles/architecture-order-engine.html#market-orders-are-sent-as-marketable-limits)
+explains it.
+
+#### Parameters
+
+The table below lists the method’s parameters.
+
+| Name | Type | Required | Default | Description |
+|----|----|:--:|----|----|
+| `transaction_type` | character | yes |  | `buy` or `sell`. UBI overrides it for a `quantity_reference` that reduces or closes a position. |
+| `order_type` | character | yes |  | `market`, `limit`, `sl` or `sl-m`. |
+| `quantity` | integer or `NULL` | yes |  | The quantity in units, not lots, or `NULL` when a `quantity_reference` supplies it. It has no default, so you have to write `NULL` on purpose. |
+| `product` | character | yes |  | `cnc`, `mis` or `nrml`. |
+| `price` | numeric or `NULL` | no | `NULL` | The limit price in rupees. Leave it out for `market` and `sl-m`, or when a `price_reference` supplies it. |
+| `trigger_price` | numeric or `NULL` | no | `NULL` | The trigger price in rupees, for `sl` and `sl-m`. |
+| `validity` | character or `NULL` | no | `NULL` | `day` or `ioc`. UBI uses `day` when it is `NULL`. |
+| `disclosed_quantity` | integer or `NULL` | no | `NULL` | The part of the order to show on the exchange. `NULL` shows all of it. |
+| `after_market` | logical | no | `FALSE` | `TRUE` sends an after-market order, which the broker queues for the next session. |
+| `tag` | character or `NULL` | no | `NULL` | A label of up to twenty letters and digits. |
+| `dry_run` | logical | no | `FALSE` | `TRUE` has UBI build the broker’s request and return it without sending it. |
+| `price_reference` | named list or `NULL` | no | `NULL` | A price for UBI to work out, such as `list(kind = "offer_level", level = 2)`. The seven kinds are on [Price wrappers](https://pramodathani.github.io/tradeR/articles/guide-price-wrappers.html#the-seven-price-references). |
+| `quantity_reference` | named list or `NULL` | no | `NULL` | A quantity for UBI to work out, such as `list(kind = "liquidate_position", product = "intraday")`. The kinds are on [Positions](https://pramodathani.github.io/tradeR/articles/guide-positions.html#the-quantity-reference-ubi-resolves). |
+| `synthetic` | named list or `NULL` | no | `NULL` | A synthetic order type and its settings, such as `list(type = "bracket", stop_price = 990, stop_limit_price = 988, target_price = 1010)`. The classes on [Synthetic orders](https://pramodathani.github.io/tradeR/articles/guide-synthetic-orders.md) build it for you. |
+
+#### Example
+
+The first example below is a dry run of a plain limit buy of one
+RELIANCE share at 1000 rupees. The second asks UBI to price the order at
+the best offer instead of stating a price.
+
+``` r
+
+reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+
+answer <- reliance$place_order(
+  transaction_type = "buy",
+  order_type = "limit",
+  quantity = 1,
+  product = "cnc",
+  price = 1000,
+  dry_run = TRUE
+)
+print(answer)
+
+answer <- reliance$place_order(
+  transaction_type = "buy",
+  order_type = "limit",
+  quantity = 1,
+  product = "cnc",
+  price_reference = list(
+    kind = "offer_level",
+    level = 1
+  ),
+  dry_run = TRUE
+)
+print(answer)
+```
+
+When the Python version of these two calls was run against a local UBI
+on Saturday 2026-09-26, with the market closed and the day before UBI
+began holding plain limit orders, the answers showed three things worth
+knowing. The plain limit order’s dry run may answer differently today.
+
+- UBI chose a different broker for each request, `shoonya` and then
+  `stoxkart`, because its selector takes turns among the brokers that
+  can take the order.
+- The lower-case `"buy"`, `"limit"` and `"cnc"` reached each broker in
+  that broker’s own spelling: `trantype: B`, `prctyp: LMT` and `prd: C`
+  for Shoonya, and `DELIVERY` for Stoxkart.
+- The price reference was resolved to `1226.0`, which was the one level
+  on the offer side of the book in the quote captured the same
+  afternoon.
+
+Each dry-run answer held the `broker`, `dry_run` set to true, the
+`instrument_id`, an `intent_id`, the `request` with the broker’s
+`method`, `url` and form or JSON body, an empty `skipped` list, a null
+`tag` and the preparation time under `timing_ms`. In R these arrive as a
+named list, so the resolved price of the second call is
+`answer[["request"]][["json"]][["price"]]`.
+
+#### Returns
+
+The method returns a named list, which is UBI’s answer unchanged. The
+table below lists its elements; which of them appear depends on whether
+the order was sent, was a dry run, or is held inside UBI’s order engine.
+
+| Element | Type | Description |
+|----|----|----|
+| `broker` | character or `NULL` | The broker UBI chose. It is `NULL` for a held limit order or a synthetic order that is waiting for a price or a time. |
+| `instrument_id` | character | The instrument the order was for. |
+| `order_id` | character or `NULL` | The broker’s id for the order, which `modify_order()` and `cancel_order()` take. It is `NULL` unless the outcome is `accepted`. |
+| `outcome` | character | `accepted`, `rejected` or `unknown`; `partial` for a type that sends several orders when only some were accepted, which UBI answers with HTTP 207 and the package returns rather than signals; or `armed` for an order the engine is holding. Absent on a dry run. |
+| `status_message` | character or `NULL` | Why the outcome is not `accepted`. |
+| `broker_response` | named list, character or `NULL` | The broker’s own answer. |
+| `dry_run` | logical | `TRUE`, on a dry run only. |
+| `request` | named list | On a dry run only: the method, the URL and the body the broker would have received. |
+| `skipped` | list | Each broker UBI passed over before the one it chose, with its reason. |
+| `tag` | character or `NULL` | The tag the order carried. |
+| `timing_ms` | named list | How long UBI spent preparing the order, and how long the broker took. |
+| `intent_id` | character | The id of the order’s intent in UBI’s order engine, on every answer. [`Account$intent()`](https://pramodathani.github.io/tradeR/articles/guide-account.html#intent) reads the answer again by it. |
+| `parent_id` | character | Present for an order the engine recorded as a parent, including a held limit order. Keep it: it is the only handle on an order that has not reached a broker yet. |
+| `legs` | list | Present for the types that send several orders at once, such as `freeze_slicer` and `ladder`, one entry per order with its plan `path`, `instrument_id`, `outcome`, `order_id` and `status_message`. |
+
+#### Errors
+
+The table below lists the conditions the method signals. Each one can be
+caught by its class name with
+[`tryCatch()`](https://rdrr.io/r/base/conditions.html), for example
+`tryCatch(..., ConflictError = function(error) ...)`.
+
+| Condition | When |
+|----|----|
+| `BadRequestError` | A field is invalid, the price fields do not fit the order type, or a synthetic order’s own settings are wrong. |
+| `LossLockoutError` | The day’s loss is past UBI’s daily loss limit. |
+| `NotFoundError` | No broker has a mapping for this instrument today. |
+| `ConflictError` | A `quantity_reference` asked to reduce or close a position that is not held, a market order run as a marketable limit found nobody on the other side of the book or no fresh quote, a reduce-only order would not reduce the position, or the engine read the order too late or had already started it before a restart. |
+| `OrderRejectedError` | The broker refused the order. Its answer is in the condition’s `detail` field, not in its message. |
+| `RateLimitError` | The broker’s daily order cap has no room for this order. |
+| `ServiceUnavailableError` | No broker could take the order, the order engine is not running, or a `price_reference` could not be resolved, for example because the book is empty. |
+| `OrderOutcomeUnknownError` | The order was sent but its outcome is unknown. Read [`orders`](#orders), or [`Account$intent()`](https://pramodathani.github.io/tradeR/articles/guide-account.html#intent) with the `intent_id` in the condition’s `detail`, before sending it again, or you may place it twice. |
+| `UnifiedBrokerInterfaceError` | Any other failure reported by, or on the way to, UBI. |
+
+Each of these is described, with what to do next, on the
+[Errors](https://pramodathani.github.io/tradeR/articles/guide-errors.md)
+page.
+
+**Under the hood.**
+
+The method builds a named list from its arguments and sends it as JSON
+with the shared client’s `post()` method. The six fields that are always
+present come first, and each optional field is added only when it is not
+`NULL`. For the price-reference example above, the body was the one
+below.
+
+``` json
+{
+  "instrument_id": "3f92570a-9924-5bf5-9f9d-e006cd9f4202",
+  "transaction_type": "buy",
+  "order_type": "limit",
+  "product": "cnc",
+  "after_market": false,
+  "dry_run": true,
+  "quantity": 1,
+  "price_reference": {"kind": "offer_level", "level": 1}
+}
+```
+
+Nothing else is sent: one call is one request. UBI’s route is documented
+under [Place an
+order](https://pramodathani.github.io/unified_broker_interface/rest-api/orders/#place-an-order).
+
+## modify_order
+
+The method’s signature is shown below. It places orders, and it sends
+`PUT /api/orders/modify`.
+
+``` r
+
+modify_order(
+  order_id = NULL,
+  quantity = NULL,
+  price = NULL,
+  trigger_price = NULL,
+  order_type = NULL,
+  validity = NULL,
+  disclosed_quantity = NULL,
+  broker = NULL,
+  dry_run = FALSE,
+  parent_id = NULL,
+  part = NULL
+)
+```
+
+This method changes one order that is still waiting in the market. Give
+at least one field to change; every field left as `NULL` keeps the value
+the order already has. UBI finds the order by its id in the brokers’
+order books, so the method does not check that the order belongs to the
+instrument you called it on.
+
+UBI’s order books are copies that its own collectors refresh every few
+seconds, so an order placed a moment ago is not in them yet, and
+changing it signals `NotFoundError`. In a live test on 2026-09-20 an
+order took 2.0 seconds to appear. Wait until the order shows up in
+[`orders`](#orders) before you change it.
+
+An order that is a leg of one of UBI’s synthetic orders is handed to the
+order engine, which lets the order type carry on from the change: a
+trailing stop trails from the trigger you set, and a chaser steps on
+from the price you set. Only such a leg’s `price`, `trigger_price` and
+`quantity` can change, and anything else signals `ConflictError`.
+
+An order the engine is still holding, such as a plain limit order
+waiting for the book to reach its price, has no broker order id yet.
+Name it by `parent_id` instead of `order_id`. Only its `price` and
+`quantity` can change, nothing is sent to a broker, and the order is
+later sent at the new terms.
+
+#### Parameters
+
+The table below lists the method’s parameters.
+
+| Name | Type | Required | Default | Description |
+|----|----|:--:|----|----|
+| `order_id` | character or `NULL` | one of the two | `NULL` | The id the broker gave the order, as `place_order()` returned it. |
+| `quantity` | integer or `NULL` | no | `NULL` | The new total quantity in units, counting what has already filled. |
+| `price` | numeric or `NULL` | no | `NULL` | The new limit price in rupees. |
+| `trigger_price` | numeric or `NULL` | no | `NULL` | The new trigger price in rupees. |
+| `order_type` | character or `NULL` | no | `NULL` | The new order type: `market`, `limit`, `sl` or `sl-m`. |
+| `validity` | character or `NULL` | no | `NULL` | The new validity: `day` or `ioc`. |
+| `disclosed_quantity` | integer or `NULL` | no | `NULL` | The new quantity to show on the exchange. |
+| `broker` | character or `NULL` | no | `NULL` | The broker holding the order. It is needed only after a `ConflictError` that says two brokers share the id. |
+| `dry_run` | logical | no | `FALSE` | `TRUE` has UBI build the broker’s request and return it without sending it. |
+| `parent_id` | character or `NULL` | one of the two | `NULL` | The `parent_id` of an order the engine is still holding, or of the plan that holds `part`, as `place_order()` returned it. |
+| `part` | character or `NULL` | no | `NULL` | With `parent_id`, the path of a part of a `plan` order that has not been sent, such as `root.each_fill.children.0` for a bracket’s stop. Its `price`, `trigger_price` and `quantity` can change, and it keeps them until its turn comes. |
+
+#### Example
+
+The first example below changes a held limit order by its `parent_id`.
+No output is shown for it, because it would change a real order.
+
+``` r
+
+held <- reliance$buy_at_limit_price(price = 1000, quantity = 1, product = "cnc")
+reliance$modify_order(parent_id = held[["parent_id"]], price = 995)
+```
+
+The second example sends a limit order to the broker at once, with the
+`simple` type, waits for it to appear and then lowers its price. No
+output is shown for it either, for the same reason.
+
+``` r
+
+answer <- reliance$place_order(
+  transaction_type = "buy",
+  order_type = "limit",
+  quantity = 1,
+  product = "cnc",
+  price = 1000,
+  after_market = TRUE,
+  synthetic = list(type = "simple")
+)
+order_id <- answer[["order_id"]]
+
+for (attempt in 1:30) {
+  frame <- reliance$open_orders
+  if (!is.null(frame) && order_id %in% frame$order_id) {
+    break
+  }
+  Sys.sleep(2)
+}
+
+reliance$modify_order(order_id = order_id, price = 995, broker = answer[["broker"]])
+```
+
+#### Returns
+
+The method returns a named list with `broker`, `order_id`,
+`instrument_id`, `status_before_modify`, `outcome`, `status_message`,
+`broker_response` and `timing_ms`, plus `parent_id` and `synthetic_type`
+for a leg of a synthetic order. On a dry run it holds `dry_run` and the
+`request` UBI would have sent instead. A held order answers with
+`parent_id`, `synthetic_type`, `held` set to `TRUE`, the new `price` and
+`quantity`, and an `outcome` of `accepted`.
+
+#### Errors
+
+The table below lists the conditions the method signals.
+
+| Condition | When |
+|----|----|
+| `BadRequestError` | No field was given to change, or a field is invalid or is one this broker cannot change. |
+| `NotFoundError` | No broker’s order book holds this order id, which is also what a very new order gives, or the engine holds no parent with this `parent_id`. |
+| `ConflictError` | The order is already complete, cancelled, rejected or expired; two brokers hold the same id and the condition’s `detail` lists them under `brokers`; a leg of a synthetic order was asked to change a field other than its price, trigger price or quantity; or a held order has already been sent, when the `detail` names its `broker` and `order_id`. |
+| `OrderRejectedError` | The broker refused the change. |
+| `ServiceUnavailableError` | The broker’s order rate budget was full, so the change was not sent. It is worth retrying a moment later. |
+| `OrderOutcomeUnknownError` | The change was sent but its outcome is unknown. |
+| `UnifiedBrokerInterfaceError` | Any other failure reported by, or on the way to, UBI. |
+
+**Under the hood.**
+
+The body holds `dry_run`, plus `order_id` or `parent_id` and each field
+that is not `NULL`, and it is sent with the shared client’s `put()`
+method. UBI’s route is documented under [Modify an
+order](https://pramodathani.github.io/unified_broker_interface/rest-api/orders/#modify-an-order).
+
+## cancel_order
+
+The method’s signature is shown below. It places orders, and it sends
+`DELETE /api/orders/cancel`.
+
+``` r
+
+cancel_order(order_id, broker = NULL, dry_run = FALSE)
+```
+
+This method cancels one order that is still waiting in the market. Like
+`modify_order()`, it finds the order by id across every broker’s order
+book, does not check which instrument it belongs to, and cannot see an
+order placed in the last few seconds.
+
+An order that is a leg of one of UBI’s synthetic orders is cancelled
+through the order engine, so the order type knows about it, but the
+synthetic order itself carries on. [`cancel_parent()`](#cancel_parent)
+stops a synthetic order, and it is also how an order the engine is still
+holding is cancelled, because such an order has no broker order id.
+Since 2026-10-05 a leg cancelled this way stays cancelled: a bracket’s
+stop is not placed again, and the leg’s unfilled quantity comes off what
+its part trades, so a later fill of the entry is protected for the
+smaller quantity only.
+
+#### Parameters
+
+The table below lists the method’s parameters.
+
+| Name | Type | Required | Default | Description |
+|----|----|:--:|----|----|
+| `order_id` | character | yes |  | The id the broker gave the order. |
+| `broker` | character or `NULL` | no | `NULL` | The broker holding the order, needed only when two brokers share the id. |
+| `dry_run` | logical | no | `FALSE` | `TRUE` has UBI build the broker’s request and return it without sending it. |
+
+#### Example
+
+The example below cancels an order, naming the broker from the answer
+that placed it.
+
+``` r
+
+reliance$cancel_order(order_id, broker = answer[["broker"]])
+```
+
+#### Returns
+
+The method returns a named list with `broker`, `order_id`,
+`status_before_cancel`, `outcome`, `status_message`, `broker_response`
+and `timing_ms`, plus `parent_id` and `synthetic_type` for a leg of a
+synthetic order, or, on a dry run, `dry_run` and the `request` UBI would
+have sent.
+
+#### Errors
+
+The table below lists the conditions the method signals.
+
+| Condition | When |
+|----|----|
+| `BadRequestError` | The order id, the broker or the dry run flag is malformed. |
+| `NotFoundError` | No broker’s order book holds this order id. |
+| `ConflictError` | The order is already complete, cancelled, rejected or expired, or two brokers hold the same id. |
+| `OrderRejectedError` | The broker refused the cancellation. |
+| `ServiceUnavailableError` | The broker’s order rate budget was full, so the cancellation was not sent. |
+| `OrderOutcomeUnknownError` | The cancellation was sent but its outcome is unknown. |
+| `UnifiedBrokerInterfaceError` | Any other failure reported by, or on the way to, UBI. |
+
+**Under the hood.**
+
+The body holds `order_id`, `dry_run` and, when given, `broker`, and it
+is sent with the shared client’s `delete()` method. UBI’s route is
+documented under [Cancel an
+order](https://pramodathani.github.io/unified_broker_interface/rest-api/orders/#cancel-an-order).
+
+## cancel_open_orders
+
+The method’s signature is shown below. It places orders: it sends
+`GET /api/orders/parents` and `GET /api/orders/details`, then one
+`DELETE /api/orders/cancel` per parent and one more
+`DELETE /api/orders/cancel` with a list of orders for the rest.
+
+``` r
+
+cancel_open_orders()
+```
+
+This method cancels every order in this instrument that is still
+waiting, whether it rests at a broker or is held in UBI’s order engine.
+The numbered steps below are what it does.
+
+1.  It reads this instrument’s open [`parents`](#parents) and cancels
+    each with [`cancel_parent()`](#cancel_parent). The parents go first,
+    because a synthetic order left running could place a new order after
+    its old ones had been cancelled.
+2.  It reads [`open_orders`](#open_orders) and leaves out every order
+    whose `engine_parent_id` is a parent the engine took a cancel for,
+    because the engine has already dealt with it. An order whose
+    parent’s cancel failed is kept, so it is still cancelled.
+3.  It cancels every remaining order in one request, naming the broker
+    from each order’s row, using the list form of UBI’s cancel route.
+
+Every parent and order is attempted even when an earlier one fails, and
+a failure is reported in the returned data frame rather than signalled,
+so one order that can no longer be cancelled does not leave the rest
+open. A parent whose cancel a broker refused for one leg is reported as
+not cancelled, because that leg may still be live.
+
+It has no `dry_run` argument. To see what it would cancel, read
+`parents` and `open_orders` yourself first.
+
+#### Parameters
+
+The method takes no parameters.
+
+#### Example
+
+The example below cancels everything waiting in RELIANCE and prints what
+happened. No real output is shown, because running the method cancels
+real orders. As an illustration, a run that found a held limit order,
+one broker order still open and one broker order that had filled a
+moment before would give three rows: the held order’s parent with
+`cancelled` set to `TRUE`, the open broker order with `cancelled` set to
+`TRUE`, and the filled one with `cancelled` set to `FALSE` and an
+`error` of `HTTP 409: the order is already COMPLETE`, which is UBI’s
+message for an order that is already finished.
+
+``` r
+
+outcome <- reliance$cancel_open_orders()
+print(outcome)
+```
+
+#### Returns
+
+The method returns a `data.frame` with one row per parent and per order,
+or `NULL` when nothing in this instrument is waiting. The table below
+lists its columns.
+
+| Column | Type | Description |
+|----|----|----|
+| `parent_id` | character or `NA` | The parent cancelled, or `NA` for an order cancelled on its own. |
+| `order_id` | character or `NA` | The broker’s id for the order, or `NA` for a parent. |
+| `broker` | character or `NA` | The broker holding the order, or `NA` for a parent. |
+| `cancelled` | logical | Whether the cancellation was accepted. |
+| `error` | character or `NA` | Why it was not: the condition’s class name and message for a parent, or the HTTP status and UBI’s message for an order. `NA` when it was. |
+
+#### Errors
+
+The table below lists the conditions the method signals.
+
+| Condition | When |
+|----|----|
+| `BrokerError` | No broker’s order book could be read. |
+| `ServiceUnavailableError` | UBI’s order book document is missing or too old to serve, or UBI’s parents could not be read. |
+| `UnifiedBrokerInterfaceError` | The order book or the parents could not be read for any other reason, or UBI refused the list of cancels as a whole. A failure to cancel one order or parent is reported in the data frame instead. |
+
+## Reading the order book
+
+UBI serves the whole account’s order book and trade book, across every
+broker, and has no route for one instrument. So each active binding
+below reads the whole book, one request per access, and keeps the rows
+whose `instrument_id` matches this instrument. The book is not merged
+across brokers: one order at one broker is one row, and the same
+instrument traded at two brokers gives a row from each. A row whose
+`instrument_id` UBI could not work out is invisible here, because there
+is no other field that names the instrument reliably.
+
+The table below shows which statuses each active binding keeps. An order
+still waiting in the market is `PENDING` at some brokers and `OPEN` at
+others, which is why `open_orders` takes both.
+
+| Active binding     | Statuses kept     |
+|--------------------|-------------------|
+| `orders`           | all six           |
+| `open_orders`      | `PENDING`, `OPEN` |
+| `completed_orders` | `COMPLETE`        |
+| `rejected_orders`  | `REJECTED`        |
+| `cancelled_orders` | `CANCELLED`       |
+
+A status with no active binding of its own, such as `EXPIRED`, is found
+by filtering the `status` column of `orders`. An order UBI’s order
+engine is still holding has not reached a broker, so it is in none of
+these data frames; it is in [`parents`](#parents). Every active binding
+returns `NULL`, not an empty data frame, when no row matches, and each
+access sends a new request, so assign the data frame to a variable when
+you need it twice. The active bindings are read-only, and assigning to
+one signals an error.
+
+### orders
+
+This active binding reads `GET /api/orders/details`. It gives every one
+of today’s orders in this instrument, whatever its status.
+
+#### Example
+
+The example below reads the orders and keeps the expired ones. When the
+Python version was run against a local UBI on 2026-09-26, the account
+had placed no RELIANCE order that day, so the property returned nothing,
+which in R is `NULL`.
+
+``` r
+
+frame <- reliance$orders
+print(frame)
+
+if (!is.null(frame)) {
+  expired <- frame[frame$status == "EXPIRED", ]
+}
+```
+
+#### Returns
+
+The active binding gives a `data.frame` with UBI’s order fields, or
+`NULL` when this instrument has no orders today. The table lists the
+columns the package’s documentation names; UBI’s [order
+book](https://pramodathani.github.io/unified_broker_interface/rest-api/orders/#order-book)
+page lists every field.
+
+| Column | Type | Description |
+|----|----|----|
+| `broker` | character | The broker holding the order. |
+| `order_id` | character | The broker’s id for the order. |
+| `status` | character | `PENDING`, `OPEN`, `COMPLETE`, `CANCELLED`, `REJECTED` or `EXPIRED`. |
+| `status_message` | character or `NA` | Why an order was rejected, in the words of whoever refused it. |
+| `transaction_type` | character | `BUY` or `SELL`. |
+| `product` | character | `CNC`, `MIS` or `NRML`. |
+| `order_type` | character | `MARKET`, `LIMIT`, `SL` or `SL-M`. |
+| `quantity` | numeric | The order’s quantity in units. |
+| `filled_quantity` | numeric | How much has filled. |
+| `price` | numeric | The limit price. |
+| `trigger_price` | numeric | The trigger price. |
+| `average_price` | numeric | The average fill price. |
+| `order_timestamp` | character | When the order was placed. |
+| `engine_parent_id` | character or `NA` | The order engine parent that placed the order, or `NA` for an order placed elsewhere. |
+| `leg_role` | character or `NA` | The order’s role in that parent, such as `entry`, `stop`, `target` or `slice`. |
+| `synthetic_type` | character or `NA` | The parent’s order type, such as `bracket` or `virtual_limit`. |
+| `intent_id` | character or `NA` | The intent the parent was placed for, as the place answer named it. |
+
+A column that is null in every row comes back as a logical column of
+`NA` values rather than a character one.
+
+#### Errors
+
+The table below lists the conditions the active binding signals.
+
+| Condition | When |
+|----|----|
+| `BrokerError` | No broker’s order book could be read. |
+| `ServiceUnavailableError` | UBI’s order book document is missing or too old to serve. This means UBI’s own background writer stopped, not that a broker is down. |
+| `UnifiedBrokerInterfaceError` | Any other failure reported by, or on the way to, UBI. |
+
+### open_orders
+
+This active binding reads `GET /api/orders/details`. It gives today’s
+orders in this instrument that are still waiting in the market, which
+are the only ones `modify_order()` and `cancel_order()` will accept. It
+returns a data frame shaped like [`orders`](#orders), or `NULL`, and
+signals the same conditions.
+
+### completed_orders
+
+This active binding reads `GET /api/orders/details`. It gives today’s
+orders in this instrument that filled in full. It returns a data frame
+shaped like [`orders`](#orders), or `NULL`, and signals the same
+conditions.
+
+### rejected_orders
+
+This active binding reads `GET /api/orders/details`. It gives today’s
+orders in this instrument that a broker or the exchange refused. The
+`status_message` column holds the reason, which is the first place to
+look after an `accepted` order that never filled. It returns a data
+frame shaped like [`orders`](#orders), or `NULL`, and signals the same
+conditions.
+
+### cancelled_orders
+
+This active binding reads `GET /api/orders/details`. It gives today’s
+orders in this instrument that were cancelled. It returns a data frame
+shaped like [`orders`](#orders), or `NULL`, and signals the same
+conditions.
+
+### trades
+
+This active binding reads `GET /api/orders/trades`. It gives today’s
+trades in this instrument. One order can fill in several trades, and
+each trade names the order it came from, so `trades` is where to look
+for the prices an order actually filled at.
+
+#### Returns
+
+The active binding gives a `data.frame` with UBI’s trade fields, or
+`NULL` when this instrument has no trades today. The columns the
+package’s documentation names are listed below; UBI’s [trade
+book](https://pramodathani.github.io/unified_broker_interface/rest-api/orders/#trade-book)
+page lists every field.
+
+| Column | Type | Description |
+|----|----|----|
+| `broker` | character | The broker the trade happened at. |
+| `trade_id` | character | The id of the trade. |
+| `order_id` | character | The order the trade filled. |
+| `transaction_type` | character | `BUY` or `SELL`. |
+| `product` | character | `CNC`, `MIS` or `NRML`. |
+| `quantity` | numeric | The quantity traded. |
+| `price` | numeric | The price it traded at. |
+| `value` | numeric | The quantity times the price. |
+| `trade_timestamp` | character | When it traded. |
+| `engine_parent_id`, `leg_role`, `synthetic_type`, `intent_id` | character or `NA` | The order engine parent the trade’s order belongs to, as for an order, or `NA` for an order placed elsewhere. |
+
+#### Errors
+
+The table below lists the conditions the active binding signals.
+
+| Condition | When |
+|----|----|
+| `BrokerError` | No broker’s trade book could be read. |
+| `ServiceUnavailableError` | UBI’s trade book document is missing or too old to serve. |
+| `UnifiedBrokerInterfaceError` | Any other failure reported by, or on the way to, UBI. |
+
+## Reading the order engine’s parents
+
+A parent is one order the order engine was asked for, such as a bracket,
+a trailing stop or a held limit order, and its legs are the broker
+orders it placed. Every answer from the engine for such an order carries
+a `parent_id`, which the members below take. The classes on [Synthetic
+orders](https://pramodathani.github.io/tradeR/articles/guide-synthetic-orders.md)
+keep their own `parent_id` and call these members for you.
+
+### cancel_parent
+
+The method’s signature is shown below. It places orders, and it sends
+`DELETE /api/orders/cancel`.
+
+``` r
+
+cancel_parent(parent_id, part = NULL, dry_run = FALSE)
+```
+
+This method cancels one parent, with every leg it still has resting at a
+broker, so the parent places, moves and cancels nothing more. It is how
+a synthetic order is stopped and how a held limit order is cancelled. A
+position the parent has already opened is not closed.
+
+When a broker refuses the cancel of one leg, or its outcome is unknown,
+UBI answers HTTP 207, which the package returns rather than signals, and
+the parent’s `state` is `cancelling` rather than `cancelled`. The parent
+no longer acts, and becomes `cancelled` on its own once the broker
+reports that leg finished. Read `cancelled_legs` to see which leg may
+still be live, and call the method again to retry it.
+
+#### Parameters
+
+The table below lists the method’s parameters.
+
+| Name | Type | Required | Default | Description |
+|----|----|:--:|----|----|
+| `parent_id` | character | yes |  | The `parent_id` that `place_order()` answered with. |
+| `part` | character or `NULL` | no | `NULL` | The path of one part of a `plan` order to cancel, such as `root.each_fill.children.0`, as the parent’s `parameters$parts` lists it. The rest of the plan carries on. `NULL` cancels the whole parent. |
+| `dry_run` | logical | no | `FALSE` | `TRUE` has UBI say what would be cancelled, without cancelling anything. |
+
+#### Example
+
+The example below places a held limit order and cancels it again. No
+output is shown for it, because it places and cancels a real order.
+
+``` r
+
+held <- reliance$buy_at_limit_price(price = 1000, quantity = 1, product = "cnc")
+answer <- reliance$cancel_parent(held[["parent_id"]])
+print(answer[["state"]])
+```
+
+#### Returns
+
+The method returns a named list with `parent_id`, `synthetic_type`,
+`state`, `intent_id` and `cancelled_legs`, which holds one entry per leg
+with its `leg_id`, `broker`, `order_id`, `outcome` and `status_message`.
+A part answers instead with `parent_id`, `synthetic_type`, `part`, its
+`state`, `outcome`, `status_message`, `intent_id` and `orders`, where
+each order’s `cancel_accepted` says whether its broker accepted the
+cancel.
+
+#### Errors
+
+The table below lists the conditions the method signals.
+
+| Condition | When |
+|----|----|
+| `BadRequestError` | The parent id is malformed. |
+| `NotFoundError` | The order engine holds no parent with this id, or the plan has no part at this path. |
+| `ConflictError` | The parent or part has already finished, the part is kept whole and has not started, or the parent is not a plan and was given a part. |
+| `ServiceUnavailableError` | The order engine is not running. |
+| `OrderOutcomeUnknownError` | The engine did not answer in time. |
+| `UnifiedBrokerInterfaceError` | Any other failure reported by, or on the way to, UBI. |
+
+### parents
+
+This active binding reads `GET /api/orders/parents`. It gives this
+instrument’s parents that the order engine has not finished. It is the
+only way to see a parent that has placed nothing yet, such as a held
+limit order or an armed trigger. UBI lists every open parent in the
+account, so the active binding reads them all and keeps this
+instrument’s;
+[`Account$parents`](https://pramodathani.github.io/tradeR/articles/guide-account.html#parents)
+gives the whole list.
+
+#### Returns
+
+The active binding gives a `data.frame` with one row per parent, or
+`NULL` when no parent in this instrument is open. The table lists its
+main columns. The columns that hold nested objects are list columns, so
+`frame$body[[1]]` is the first parent’s body as a named list.
+
+| Column | Type | Description |
+|----|----|----|
+| `parent_order_id` | character | The parent’s id, which is the `parent_id` the other members take. |
+| `synthetic_type` | character | `plan` for every type but `simple`, since UBI runs every other type as a plan of its preset; the type asked for is under `parameters` as `routed_from`. |
+| `state` | character | `received`, `working` or `cancelling`; a parent placed before 2026-10-03 can also show `protecting`. The finished states, `completed`, `cancelled`, `rejected` and `failed`, do not appear here. |
+| `instrument_id` | character | This instrument. |
+| `body` | list column of named lists | The order body the parent was placed with. |
+| `parameters` | list column of named lists | The type’s settings, including the engine’s own working values. |
+| `legs` | list column of lists | One entry per broker order the parent placed. |
+
+#### Errors
+
+The table below lists the conditions the active binding signals.
+
+| Condition | When |
+|----|----|
+| `ServiceUnavailableError` | UBI’s parents could not be read. |
+| `UnifiedBrokerInterfaceError` | Any other failure reported by, or on the way to, UBI. |
+
+### parent
+
+This method’s signature is `parent(parent_id)`, and it reads
+`GET /api/orders/parents?parent_id=...`. It reads one parent, whether or
+not it has finished. UBI finds it by id alone, so the method does not
+check that it belongs to this instrument. It returns a named list with
+the same fields as a row of [`parents`](#parents), and signals
+`NotFoundError` when the engine holds no parent with this id.
+
+### parent_orders
+
+This method’s signature is `parent_orders(parent_id)`, and it reads
+`GET /api/orders/details?parent_id=...`. It gives today’s broker orders
+that one parent placed, using the order book’s `parent_id` filter. It
+returns a data frame shaped like [`orders`](#orders), whose `leg_role`
+column says what each order was to the parent, or `NULL` when the parent
+has placed nothing the order book shows yet. It signals the same
+conditions as `orders`.
+
+### parent_trades
+
+This method’s signature is `parent_trades(parent_id)`, and it reads
+`GET /api/orders/trades?parent_id=...`. It gives today’s trades in the
+broker orders that one parent placed. It returns a data frame shaped
+like [`trades`](#trades), or `NULL` when none of the parent’s orders has
+traded, and signals the same conditions as `trades`.

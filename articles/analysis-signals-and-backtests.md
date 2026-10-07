@@ -1,0 +1,377 @@
+# Signals and backtests
+
+Indicators describe the market; signals and backtests turn that
+description into decisions. This article covers the last three analysis
+methods. Two of them, from the
+[`Signals`](https://pramodathani.github.io/tradeR/reference/Signals.md)
+class, mark where one column of a data frame crosses another, which is
+how most simple trading rules are written. The third, from
+[`StrategyBacktests`](https://pramodathani.github.io/tradeR/reference/StrategyBacktests.md),
+runs a trading strategy over an instrument’s past candles with the
+package’s own backtesting engine and reports how it would have done. The
+Python library hands the same work to the Python package
+[backtesting.py](https://kernc.github.io/backtesting.py/); the R engine
+follows that package line by line, so a strategy gives the same trades
+and statistics in both.
+
+The table below lists the three methods.
+
+| Kind | Member | Description |
+|----|----|----|
+| method | [`is_cross_over`](#is_cross_over) | Marks the rows where one column rises above another |
+| method | [`is_cross_under`](#is_cross_under) | Marks the rows where one column falls below another |
+| method | [`run_backtest`](#run_backtest) | Runs a strategy over the instrument’s candles and returns its statistics |
+
+## Signals
+
+The two signal methods are different from every other analysis method in
+one way: they do not fetch candles. They work on a data frame you
+already have, usually the result of an indicator method, so you choose
+the range once and then look for crossings in it. Neither method changes
+the data frame you pass in; each returns a copy with fresh row names and
+one new logical column.
+
+The two tests compare the columns on the previous row and on this row.
+The table below states them exactly.
+
+| Method | On the previous row | On this row | Column added |
+|----|----|----|----|
+| `is_cross_over` | first column at or below the second | first column above the second | `cross_over` |
+| `is_cross_under` | first column at or above the second | first column below the second | `cross_under` |
+
+The first row is never marked, because it has no previous row, and a row
+where either comparison meets a missing value is marked `FALSE`, as
+pandas does in the Python library. This is the textbook test, and it
+replaced the old project’s version, which compared the previous first
+value with the current second value and could disagree when the second
+column moved sharply. On 400 days of INFY closes against a 20-candle
+simple moving average, the Python methods marked 16 crossovers and 17
+crossunders on 2026-09-14, and on 2026-10-07 the R methods matched the
+Python ones on every row of the fixture candles they were checked
+against.
+
+### is_cross_over
+
+`is_cross_over(data, first_column, second_column)` marks each row where
+the first column rises above the second. A typical use is the close
+crossing above a moving average, or a fast average crossing above a slow
+one. Its reference entry is
+[`Signals$is_cross_over()`](https://pramodathani.github.io/tradeR/reference/Signals.html#method-Signals-is_cross_over).
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|----|----|----|----|----|
+| `data` | `data.frame` | Yes |  | The data frame holding both columns. It is not changed. |
+| `first_column` | character | Yes |  | The name of the column that crosses |
+| `second_column` | character | Yes |  | The name of the column that is crossed |
+
+#### Example
+
+The example below was not run for this article, because it needs a live
+UBI. It finds the days in the last year on which RELIANCE closed above
+its 20-day simple moving average after closing at or below it the day
+before.
+
+``` r
+
+reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+frame <- reliance$simple_moving_average(window = 20, days = 365)
+
+crossings <- reliance$is_cross_over(frame, "close", "sma_20")
+columns <- c(
+  "datetime",
+  "close",
+  "sma_20"
+)
+print(crossings[crossings$cross_over, columns])
+```
+
+#### Returns
+
+A `data.frame` copy of `data` with fresh row names and an added logical
+`cross_over` column.
+
+#### Errors
+
+The table below lists the condition the method can signal.
+
+| Condition  | When                                                         |
+|------------|--------------------------------------------------------------|
+| `KeyError` | `data` has no column named `first_column` or `second_column` |
+
+### is_cross_under
+
+`is_cross_under(data, first_column, second_column)` marks each row where
+the first column falls below the second. It is the mirror image of
+`is_cross_over`. Its reference entry is
+[`Signals$is_cross_under()`](https://pramodathani.github.io/tradeR/reference/Signals.html#method-Signals-is_cross_under).
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|----|----|----|----|----|
+| `data` | `data.frame` | Yes |  | The data frame holding both columns. It is not changed. |
+| `first_column` | character | Yes |  | The name of the column that crosses |
+| `second_column` | character | Yes |  | The name of the column that is crossed |
+
+#### Example
+
+The example below, which was not run for this article, marks the days
+RELIANCE’s MACD line fell below its signal line. The column names come
+from `moving_average_convergence_divergence()` with its default periods
+of 12, 26 and 9.
+
+``` r
+
+frame <- reliance$moving_average_convergence_divergence(days = 365)
+crossings <- reliance$is_cross_under(
+  frame,
+  "macd_12_26_9",
+  "macd_12_26_9_signal"
+)
+columns <- c(
+  "datetime",
+  "close"
+)
+print(crossings[crossings$cross_under, columns])
+```
+
+#### Returns
+
+A `data.frame` copy of `data` with fresh row names and an added logical
+`cross_under` column.
+
+#### Errors
+
+The table below lists the condition the method can signal.
+
+| Condition  | When                                                         |
+|------------|--------------------------------------------------------------|
+| `KeyError` | `data` has no column named `first_column` or `second_column` |
+
+## Backtests
+
+A backtest replays a trading strategy over past candles as though it had
+been running then, and reports the trades it would have made and what
+they would have earned. `run_backtest()` does this with the package’s
+backtesting engine, eight R6 classes in the files
+`R/assets_analysis_backtesting_*.R` that follow backtesting.py version
+0.6.5, the package the Python library uses. You write the strategy as an
+R6 class that inherits
+[`BacktestStrategy`](https://pramodathani.github.io/tradeR/reference/BacktestStrategy.md);
+the method supplies the candles and runs it.
+
+The sequence diagram below shows what happens inside one call.
+
+``` mermaid
+
+sequenceDiagram
+    autonumber
+    participant Y as Your code
+    participant R as run_backtest
+    participant U as UBI
+    participant B as Backtest
+    Y->>R: strategy class, cash, commission, range
+    R->>U: GET /api/instruments/prices
+    U-->>R: candles, or none
+    alt no candles
+        R-->>Y: NULL
+    else candles
+        R->>R: keep datetime, open, high, low, close, volume
+        R->>R: rename to Open High Low Close Volume
+        R->>B: Backtest$new(candles, strategy, cash, commission, margin, ...)
+        B->>B: run(), which calls next_candle() once per candle
+        B-->>R: statistics
+        opt plot_filename given
+            R->>B: plot(results, filename)
+        end
+        R-->>Y: named list of statistics
+    end
+```
+
+The method selects the five candle columns by name and renames them to
+the capitalised names strategies use, so the extra columns UBI’s candles
+carry, such as `oi` and `price_factor`, are dropped. The candles’
+`datetime` is kept with them, still in India time.
+
+The engine follows backtesting.py’s fill rules, which the table below
+summarises.
+
+| Situation | Fill price |
+|----|----|
+| A market order | The next candle’s open, or the previous close with `trade_on_close = TRUE`; a stop-loss or take-profit always uses the open |
+| A stop order whose stop is reached | It becomes a market or limit order, and a market fill is no better than the stop |
+| A limit order whose limit is reached | The limit, or the open, or the stop just reached, when that is better |
+| A limit and a stop both reached on one candle | The limit is assumed to come first, so the order waits |
+
+### Writing a strategy
+
+A strategy subclass overrides two hooks, which the engine calls for you.
+The table below compares them, and the other parts of a strategy, with
+their backtesting.py counterparts, so that a strategy written for the
+Python library can be translated.
+
+| backtesting.py | This package | Why it differs |
+|----|----|----|
+| `init()` | `initialize_strategy()` | `initialize()` is the R6 constructor |
+| `next()` | `next_candle()` | [`next`](https://rdrr.io/r/base/Control.html) is a reserved word in R |
+| `self.I(func, *args)` assigned to an attribute | `self$indicator(name, values)`, read back as `self$indicators$name` | An R6 object is locked once it is built and cannot gain fields, so indicators are stored by name; you compute `values` yourself, such as `talib::SMA(self$data$Close, timePeriod = 10)` |
+| `self.data.Close[-1]` | `tail(self$data$Close, 1)` | R has no negative indexing from the end |
+| `if not self.position:` | `if (self$position$size == 0)` | An R object has no truth value |
+| `backtesting.lib.crossover(a, b)` | `self$crossover(a, b)` | Behaviour lives on the class that uses it |
+
+Inside `next_candle()`, `self$data` and `self$indicators` show only the
+candles up to the current one, exactly as backtesting.py’s arrays do, so
+a strategy cannot look ahead. `self$buy()` and `self$sell()` take a
+`size` that is either a fraction of the equity strictly between 0 and 1
+or a whole number of at least 1, and they default to nearly all of the
+equity, as in backtesting.py. Indicators must be numeric vectors;
+backtesting.py’s two-dimensional indicators and its plotting options are
+not ported.
+
+### run_backtest
+
+`run_backtest(strategy, cash = 10000, commission = 0.0, margin = 1.0, trade_on_close = FALSE, hedging = FALSE, exclusive_orders = FALSE, plot_filename = NULL, interval = "day", from_date = NULL, to_date = NULL, days = NULL, adjusted = TRUE)`
+sends `GET /api/instruments/prices`. Its reference entry is
+[`StrategyBacktests$run_backtest()`](https://pramodathani.github.io/tradeR/reference/StrategyBacktests.html#method-StrategyBacktests-run_backtest).
+
+This method runs a strategy over the instrument’s candles in a range and
+returns the backtest’s statistics. It sends no orders; it only reads
+candles. When `plot_filename` is given, it also writes a plot of the run
+to that HTML file without opening it.
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|----|----|----|----|----|
+| `strategy` | R6 class generator | Yes |  | The strategy class to run, a subclass of `BacktestStrategy`, not an object built from it |
+| `cash` | numeric | No | `10000` | The starting cash |
+| `commission` | numeric | No | `0.0` | The commission on each trade, as a fraction of its value |
+| `margin` | numeric | No | `1.0` | The margin required, as a fraction, where 1.0 means no leverage |
+| `trade_on_close` | logical | No | `FALSE` | `TRUE` to fill market orders at the current candle’s close rather than the next candle’s open |
+| `hedging` | logical | No | `FALSE` | `TRUE` to allow long and short trades at the same time |
+| `exclusive_orders` | logical | No | `FALSE` | `TRUE` to close the open trade whenever a new order is placed |
+| `plot_filename` | character | No | `NULL` | The path of an HTML file to write the plot to, or `NULL` for no plot |
+| `interval`, `from_date`, `to_date`, `days`, `adjusted` |  | No | as in `prices()` | The candle range, as described in [Analysis](https://pramodathani.github.io/tradeR/articles/analysis.html#the-common-arguments) |
+
+#### Example
+
+The example below defines the classic moving average crossover strategy,
+which buys when a 10-candle average crosses above a 30-candle one and
+sells on the reverse, and runs it over two years of RELIANCE with
+100,000 rupees. It was not run for this article, because it needs a live
+UBI. The same strategy over 730 days of INFY reported 9 trades when the
+Python method was checked on 2026-09-14.
+
+``` r
+
+SmaCross <- R6::R6Class(
+  "SmaCross",
+  inherit = BacktestStrategy,
+  public = list(
+    fast = 10,
+    slow = 30,
+
+    initialize_strategy = function() {
+      self$indicator(
+        "fast_average",
+        talib::SMA(self$data$Close, timePeriod = self$fast)
+      )
+      self$indicator(
+        "slow_average",
+        talib::SMA(self$data$Close, timePeriod = self$slow)
+      )
+    },
+
+    next_candle = function() {
+      fast_average <- self$indicators$fast_average
+      slow_average <- self$indicators$slow_average
+      if (self$crossover(fast_average, slow_average)) {
+        self$position$close()
+        self$buy()
+      } else if (self$crossover(slow_average, fast_average)) {
+        self$position$close()
+        self$sell()
+      }
+    }
+  )
+)
+
+reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+statistics <- reliance$run_backtest(
+  SmaCross,
+  cash = 100000,
+  commission = 0.001,
+  days = 730,
+  plot_filename = "sma_cross.html"
+)
+labels <- c(
+  "Return [%]",
+  "# Trades",
+  "Win Rate [%]",
+  "Max. Drawdown [%]"
+)
+str(statistics[labels])
+```
+
+The strategy’s hooks are `initialize_strategy()` and `next_candle()`,
+the R names of backtesting.py’s `init` and
+[`next`](https://rdrr.io/r/base/Control.html). The statistics labels in
+the last lines are backtesting.py’s own, kept unchanged so that results
+can be compared with the Python library; backtesting.py’s documentation
+lists them all.
+
+#### Returns
+
+A named list of the backtest’s statistics, with the same names in the
+same order as the pandas Series backtesting.py returns, or `NULL` when
+UBI has no candles for the range. `Start` and `End` are `POSIXct`
+values, and `Duration` and the four duration statistics are `difftime`
+values in days. The trades themselves are a data frame under `_trades`,
+with `EntryTime` and `ExitTime` columns and candle numbers in `EntryBar`
+and `ExitBar` that count from 1, so each is one more than in Python. The
+equity curve is a data frame under `_equity_curve`, with a `datetime`
+column first. Trades still open at the end count in the equity curve but
+not in the trade statistics, as in backtesting.py, and a warning says
+so.
+
+#### Errors
+
+The table below lists the condition the method can signal.
+
+| Condition | When |
+|----|----|
+| `UnifiedBrokerInterfaceError` | UBI refused the candle request or could not be reached |
+
+**Under the hood.**
+
+The old project always called backtesting.py’s
+[`plot()`](https://rdrr.io/r/graphics/plot.default.html), which wrote an
+HTML file named after the strategy into the current directory and opened
+a browser tab on every run. In both the Python library and this package
+the plot is optional and never opens anything by itself, and it shows
+the run just made rather than running the strategy a second time. The R
+plot is not backtesting.py’s interactive Bokeh chart, which has no R
+counterpart. It is one self-contained HTML page with no scripts and no
+network requests, holding a line of the closes with a green dot at each
+closed trade’s entry and a red dot at its exit, a line of the equity,
+the statistics as a table and the closed trades as a table.
+
+On 2026-10-07 fourteen backtests on the parity fixtures, covering
+commissions, `trade_on_close`, `exclusive_orders`, a margin of 0.5,
+stop-loss and take-profit orders, stop and limit entries with partial
+closes, hedging and 5-minute candles, gave the same trades on the same
+candles at the same prices in R as in backtesting.py. The largest
+relative difference in any statistic was 2.7e-14. backtesting.py’s
+bid-ask spread, commission given as a function, strategy parameters
+passed to `run()` and
+[`optimize()`](https://rdrr.io/r/stats/optimize.html) are not ported,
+because `run_backtest()` never uses them.
+
+A backtest is only as good as its candles. Run it on an instrument that
+has them, which today means shares, equity indices, exchange traded
+funds and commodity derivatives, as [Which instruments have
+candles](https://pramodathani.github.io/tradeR/articles/analysis.html#which-instruments-have-candles)
+explains. Shares and funds are adjusted for splits and bonuses by
+default, which is what a backtest over several years needs.

@@ -1,0 +1,434 @@
+# Holding for the long term
+
+A holding is something you own outright and keep in your demat account,
+such as shares bought for delivery, as against a position, which a
+futures, options or intraday trade leaves open. The six members on this
+page read a holding and add to it or sell out of it. Positions have
+their own page,
+[Positions](https://pramodathani.github.io/tradeR/articles/guide-positions.md).
+
+**These are real orders.**
+
+`add_to_holdings()`, `reduce_holdings()` and `liquidate_holdings()` send
+market or limit orders through UBI to real brokers, with real money, and
+none of them takes a `dry_run` argument. To see what one would send,
+call
+[`place_order()`](https://pramodathani.github.io/tradeR/articles/guide-orders.html#place_order)
+with `product = "cnc"`, the same side, quantity and price, and
+`dry_run = TRUE`.
+
+The table below lists the six members.
+
+| Kind | Member | Description |
+|----|----|----|
+| active binding | [`holdings`](#holdings) | The long-term holding of this instrument, merged across every broker. |
+| active binding | [`holdings_value`](#holdings_value) | What the units held are worth at the moment. |
+| active binding | [`holdings_pnl`](#holdings_pnl) | What the units held have made or lost. |
+| places orders | [`add_to_holdings`](#add_to_holdings) | Buys more of this instrument to keep. |
+| places orders | [`reduce_holdings`](#reduce_holdings) | Sells some of the units held, without selling more than are free. |
+| places orders | [`liquidate_holdings`](#liquidate_holdings) | Sells every unit held that is free to sell. |
+
+## Which classes can be held
+
+Only instruments in UBI’s cash segments can be reported as holdings, so
+only five classes carry these members. Each class has its own copy of
+them rather than sharing a base class, but the six behave the same way
+in all five. The table below shows which classes have them and why the
+rest do not.
+
+| Class | Holdings members | Why |
+|----|:--:|----|
+| [`Equity`](https://pramodathani.github.io/tradeR/reference/Equity.md) | Yes | A share is the classic holding. |
+| [`FixedIncome`](https://pramodathani.github.io/tradeR/reference/FixedIncome.md) | Yes | A bond or a sovereign gold bond is held in the demat account. |
+| [`ExchangeTradedFund`](https://pramodathani.github.io/tradeR/reference/ExchangeTradedFund.md) | Yes | A fund’s units trade and are held like shares. |
+| [`InvestmentTrust`](https://pramodathani.github.io/tradeR/reference/InvestmentTrust.md) | Yes | A trust’s units trade and are held like shares. |
+| [`MutualFund`](https://pramodathani.github.io/tradeR/reference/MutualFund.md) | Yes | A scheme is subscribed to rather than traded, but holding it is what it is for. |
+| Every futures and options class | No | A derivative leaves a position, not a holding. |
+| Every index class | No | An index cannot be owned. |
+| `Commodity`, `Currency` and their derivatives | No | UBI’s cash segments exclude commodities and currencies, so they are never reported as holdings. |
+
+The asset class pages,
+[Equities](https://pramodathani.github.io/tradeR/articles/asset-classes-equities.md),
+[Fixed
+income](https://pramodathani.github.io/tradeR/articles/asset-classes-fixed-income.md),
+[Funds](https://pramodathani.github.io/tradeR/articles/asset-classes-funds.md)
+and [Mutual
+funds](https://pramodathani.github.io/tradeR/articles/asset-classes-mutual-funds.md),
+describe each of these classes in full.
+
+Two classes need care. No broker that serves quotes carries a cash bond
+or a mutual fund, so `FixedIncome` and `MutualFund` have no live price.
+Give the three order methods a `price`, which sends a limit order,
+rather than letting them send a market order into a book nobody quotes.
+When no price is given, these two classes send a real market order,
+because the `marketable_limit` UBI makes of a plain market order needs a
+quote and would always be refused with HTTP 409.
+
+## Always cnc
+
+Every order these members send uses the `cnc` product, and there is no
+argument to change it. `cnc` is the only product that buys into or sells
+out of a demat account. Selling a holding as `mis` would not sell your
+shares at all: it would open an intraday short position beside them,
+which the broker squares off before the close, so the mistake would cost
+money twice and leave the holding untouched. Leaving the argument out
+makes that impossible to do by accident.
+
+The order methods send plain market or limit orders through
+[`buy_at_market_price()`](https://pramodathani.github.io/tradeR/articles/guide-price-wrappers.html#buy_at_market_price),
+[`buy_at_limit_price()`](https://pramodathani.github.io/tradeR/articles/guide-price-wrappers.html#buy_at_limit_price)
+and their sell twins. A limit order is held by UBI’s order engine until
+the book reaches its price, except for `MutualFund` and `FixedIncome`,
+which pass `hold = FALSE` because nothing quotes them and a held order
+would never be sent. A market order is sent by UBI as a
+`marketable_limit`, a limit that follows the other side of the book for
+30 seconds, except again for those two classes, which pass
+`as_marketable_limit = FALSE` for the same reason. [Order
+engine](https://pramodathani.github.io/tradeR/articles/architecture-order-engine.html#when-to-send-a-limit-order-at-once)
+explains why.
+
+## Free units and pledged units
+
+A holding’s `collateral_quantity` is the part pledged to a broker as
+margin, and a broker will not let you sell it until the pledge is
+released. So `reduce_holdings()` and `liquidate_holdings()` work on the
+free units, which are the whole `quantity` minus `collateral_quantity`,
+and refuse before sending anything when the free units cannot cover the
+sale. The flowchart below shows the check both methods make.
+
+``` mermaid
+
+flowchart TD
+    A["reduce_holdings() or liquidate_holdings()"] --> B["read the holding once"]
+    B --> C{"held at all?"}
+    C -- "no" --> E1["HoldingError, nothing is sent"]
+    C -- "yes" --> D["free units = quantity minus collateral_quantity"]
+    D --> F{"which method?"}
+    F -- "reduce_holdings()" --> G{"quantity asked for<br/>more than the free units?"}
+    G -- "yes" --> E1
+    G -- "no" --> H["sell the quantity asked for, as cnc"]
+    F -- "liquidate_holdings()" --> I{"any free units?"}
+    I -- "no, all pledged" --> E1
+    I -- "yes" --> J["sell every free unit, as cnc"]
+```
+
+`holdings_value` and `holdings_pnl` still count pledged units, because a
+pledged share is still owned.
+
+## holdings
+
+`holdings` is an active binding, and each read sends
+`GET /api/portfolio/holdings`.
+
+This active binding gives the long-term holding of this instrument,
+merged across every broker. UBI serves the whole account’s holdings and
+has no route for one instrument, so each access sends one request and
+picks this instrument’s row. It matches on `instrument_id` first, and
+then on `symbol`, because UBI merges a holding held on two exchanges
+into one row under whichever broker’s row arrived first, and that row
+may carry the other exchange’s id.
+
+Unlike the order and position readers, it returns a single named list
+rather than a data frame, because an instrument has at most one holdings
+row.
+
+#### Example
+
+The example below reads the holding of two shares.
+
+``` r
+
+reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+print(reliance$holdings)
+
+infosys <- Equity$new(exchange = "nse", symbol = "INFY")
+str(infosys$holdings)
+```
+
+When the Python version of the first half ran against a local UBI on
+2026-09-26, no RELIANCE shares were held, so the holding was empty; in
+R, `reliance$holdings` is then `NULL`. For the second half, UBI’s
+[holdings](https://pramodathani.github.io/unified_broker_interface/rest-api/portfolio/#holdings)
+page shows an illustrative INFY row, which the table below lists. With
+that row, `infosys$holdings` is a named list holding these values, and
+its `pnl` element is itself a named list.
+
+| Name | Value in the illustrative row |
+|----|----|
+| `instrument_id` | `11111111-1111-5111-8111-000000000002` |
+| `isin` | `INE009A01021` |
+| `symbol` | `INFY` |
+| `exchange` | `nse` |
+| `segment` | `nse_equities` |
+| `quantity` | 20 |
+| `average_price` | 1400 |
+| `invested_value` | 28000 |
+| `last_price` | 1521.4 |
+| `current_value` | 30428 |
+| `pnl` | `unrealized` 2428, `day_change` 13.25 and `day_change_percentage` 0.88 |
+| `collateral_quantity` | 0 |
+
+#### Returns
+
+A named list with the elements below, or `NULL` when no broker holds
+this instrument.
+
+| Name | Type | Description |
+|----|----|----|
+| `instrument_id` | character | The instrument. |
+| `isin` | character or `NULL` | The ISIN, when a broker sent one. |
+| `symbol` | character | The symbol. |
+| `exchange` | character | The exchange. |
+| `segment` | character | The exchange-prefixed segment. |
+| `quantity` | numeric | Everything held, across every broker, including pledged units. |
+| `average_price` | numeric | What was paid per unit on average. |
+| `invested_value` | numeric | What was paid in all. |
+| `last_price` | numeric or `NULL` | The price used to value the holding. |
+| `current_value` | numeric or `NULL` | `quantity` times `last_price`. |
+| `pnl` | named list | `unrealized`, `day_change` and `day_change_percentage`. |
+| `collateral_quantity` | numeric | The units pledged as collateral, which cannot be sold. |
+
+#### Errors
+
+| Condition | When |
+|----|----|
+| `ServiceUnavailableError` | UBI’s holdings document is missing or too old to serve. |
+| `BrokerError` | No broker’s holdings could be read. |
+| `UnifiedBrokerInterfaceError` | Any other failure reported by, or on the way to, UBI. |
+
+## holdings_value
+
+`holdings_value` is an active binding, and each read sends
+`GET /api/portfolio/holdings`.
+
+This active binding says what the units held are worth, in rupees. UBI
+prices a holding itself, so this reads the row’s `current_value` rather
+than working it out, which is the opposite of
+[`positions_value`](https://pramodathani.github.io/tradeR/articles/guide-positions.html#positions_value).
+It counts every unit held, including pledged ones.
+
+#### Example
+
+The example below reads the value of the INFY holding.
+
+``` r
+
+print(infosys$holdings_value)
+```
+
+With the same illustrative INFY row, it prints 30428.
+
+#### Returns
+
+A numeric value in rupees, or `NULL` when this instrument is not held.
+It can also be `NULL` when the holding is held only at a broker that
+sends no price and there is no usable quote.
+
+#### Errors
+
+It signals the same conditions as [`holdings`](#holdings).
+
+## holdings_pnl
+
+`holdings_pnl` is an active binding, and each read sends
+`GET /api/portfolio/holdings`.
+
+This active binding says what the units held have made or lost. Its
+named list is not shaped like a position’s, and the table below shows
+the difference, because the two are easy to confuse.
+
+| Name | `holdings_pnl` | [`positions_pnl`](https://pramodathani.github.io/tradeR/articles/guide-positions.html#positions_pnl) |
+|----|:--:|:--:|
+| `unrealized` | Yes | Yes |
+| `day_change` | Yes | No |
+| `day_change_percentage` | Yes | No |
+| `realized` | No | Yes |
+| `total` | No | Yes |
+
+Only `unrealized` means the same thing in both: what is still riding on
+what you hold, against what you paid. A holding has no realised figure,
+because selling a share removes it from the holding rather than booking
+a profit against it.
+
+#### Example
+
+The example below reads the profit and loss of the INFY holding.
+
+``` r
+
+str(infosys$holdings_pnl)
+```
+
+With the same illustrative INFY row, it is a named list with
+`unrealized` 2428, `day_change` 13.25 and `day_change_percentage` 0.88.
+
+#### Returns
+
+A named list with `unrealized` in rupees against what was paid, and
+`day_change` in rupees and `day_change_percentage` in per cent since the
+previous close, or `NULL` when this instrument is not held.
+
+#### Errors
+
+It signals the same conditions as [`holdings`](#holdings).
+
+## add_to_holdings
+
+`add_to_holdings(quantity, price = NULL, validity = NULL, after_market = FALSE, tag = NULL)`
+places orders, and each call sends `POST /api/orders/place`.
+
+This method buys more of this instrument to keep, always as `cnc`. It
+reads nothing first, because you can buy whether or not you already hold
+any, and neither the package nor UBI checks your funds before sending;
+the broker does.
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|----|----|:--:|----|----|
+| `quantity` | integer | yes |  | The number of units to buy. |
+| `price` | numeric or `NULL` | no | `NULL` | A limit price in rupees, or `NULL` for a market order. |
+| `validity` | character or `NULL` | no | `NULL` | `"day"` or `"ioc"`. UBI uses `"day"` when it is `NULL`. |
+| `after_market` | logical | no | `FALSE` | `TRUE` sends an after-market order. |
+| `tag` | character or `NULL` | no | `NULL` | A label of up to twenty letters and digits. |
+
+#### Example
+
+The example below buys ten INFY shares at no more than 1500 rupees each,
+and queues the order for the next session.
+
+``` r
+
+infosys$add_to_holdings(quantity = 10, price = 1500.0, after_market = TRUE)
+```
+
+#### Returns
+
+The named list that
+[`place_order()`](https://pramodathani.github.io/tradeR/articles/guide-orders.html#place_order)
+returns.
+
+#### Errors
+
+| Condition | When |
+|----|----|
+| `UnifiedBrokerInterfaceError` | Any failure reported by, or on the way to, UBI, including every condition [`place_order()`](https://pramodathani.github.io/tradeR/articles/guide-orders.html#place_order) can signal. |
+
+## reduce_holdings
+
+`reduce_holdings(quantity, price = NULL, validity = NULL, after_market = FALSE, tag = NULL)`
+places orders, and each call sends `GET /api/portfolio/holdings` and
+then `POST /api/orders/place`.
+
+This method sells some of the units held, as `cnc`. It reads the holding
+once and refuses, before sending anything, when the quantity asked for
+is more than the free units.
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|----|----|:--:|----|----|
+| `quantity` | integer | yes |  | The number of units to sell. |
+| `price` | numeric or `NULL` | no | `NULL` | A limit price in rupees, or `NULL` for a market order. |
+| `validity` | character or `NULL` | no | `NULL` | `"day"` or `"ioc"`. |
+| `after_market` | logical | no | `FALSE` | `TRUE` sends an after-market order. |
+| `tag` | character or `NULL` | no | `NULL` | A label of up to twenty letters and digits. |
+
+#### Example
+
+The example below sells five of the INFY shares at no less than 1550
+rupees each.
+
+``` r
+
+infosys$reduce_holdings(quantity = 5, price = 1550.0)
+```
+
+#### Returns
+
+The named list that
+[`place_order()`](https://pramodathani.github.io/tradeR/articles/guide-orders.html#place_order)
+returns.
+
+#### Errors
+
+| Condition | When |
+|----|----|
+| `HoldingError` | This instrument is not held, or the quantity is more than the free units. |
+| `UnifiedBrokerInterfaceError` | Any failure reported by, or on the way to, UBI. |
+
+## liquidate_holdings
+
+`liquidate_holdings(price = NULL, validity = NULL, after_market = FALSE, tag = NULL)`
+places orders, and each call sends `GET /api/portfolio/holdings` and
+then `POST /api/orders/place`.
+
+This method sells every unit held that is free to sell, as `cnc`.
+Pledged units are left alone, so it empties the holding only when
+nothing is pledged.
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|----|----|:--:|----|----|
+| `price` | numeric or `NULL` | no | `NULL` | A limit price in rupees, or `NULL` for a market order. |
+| `validity` | character or `NULL` | no | `NULL` | `"day"` or `"ioc"`. |
+| `after_market` | logical | no | `FALSE` | `TRUE` sends an after-market order. |
+| `tag` | character or `NULL` | no | `NULL` | A label of up to twenty letters and digits. |
+
+#### Example
+
+The example below sells every free INFY share at market.
+
+``` r
+
+infosys$liquidate_holdings()
+```
+
+#### Returns
+
+The named list that
+[`place_order()`](https://pramodathani.github.io/tradeR/articles/guide-orders.html#place_order)
+returns.
+
+#### Errors
+
+| Condition | When |
+|----|----|
+| `HoldingError` | This instrument is not held, or every unit held is pledged as collateral. |
+| `UnifiedBrokerInterfaceError` | Any failure reported by, or on the way to, UBI. |
+
+## HoldingError
+
+`HoldingError` is the package’s own condition for a holding that cannot
+be changed as asked. It is signalled before anything is sent, and its
+parent class is `InstrumentError`, as the table `ASSETS_ERROR_PARENTS`
+in `R/assets_exceptions.R` records. The table below lists its three
+messages as `Equity` words them, with `<...>` marking a value filled in.
+The other four classes say `units` where `Equity` says `shares`, and in
+all five classes the first message ends with the instrument’s
+[`format()`](https://rdrr.io/r/base/format.html) text.
+
+| Message | Signalled by |
+|----|----|
+| `No <symbol> shares are held, so there is nothing to sell` | `reduce_holdings()`, `liquidate_holdings()` |
+| `<free> of the <quantity> <symbol> shares held are free to sell, because <pledged> are pledged as collateral, so <asked> cannot be sold` | `reduce_holdings()` |
+| `All <quantity> <symbol> shares held are pledged as collateral, so none can be sold` | `liquidate_holdings()` |
+
+The example below catches it, so a sale that is too large is reported
+rather than stopping the script.
+
+``` r
+
+tryCatch(
+  infosys$reduce_holdings(quantity = 1000000, price = 1550.0),
+  HoldingError = function(error) {
+    cat("Nothing was sold:", conditionMessage(error), "\n")
+  }
+)
+```
+
+The
+[Errors](https://pramodathani.github.io/tradeR/articles/guide-errors.html#holdingerror)
+page lists `HoldingError` with the rest of the package’s error
+conditions.

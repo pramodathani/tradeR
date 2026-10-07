@@ -14,6 +14,16 @@ This package places real orders with real money. There is no paper
 trading mode and no simulator, and `dry_run = TRUE` is the only
 rehearsal available.
 
+## See also
+
+Useful links:
+
+- <https://pramodathani.github.io/tradeR/>
+
+- <https://github.com/pramodathani/tradeR>
+
+- Report bugs at <https://github.com/pramodathani/tradeR/issues>
+
 ## Author
 
 **Maintainer**: Pramod Athani <pramod.r.athani@gmail.com>

@@ -35,7 +35,7 @@ For Equity$search(), find the nse shares whose symbol contains a partial name.
 For Equity$search(), search, then build the first match and print its last price.
 For Equity$search(), check whether a symbol is listed on both the nse and the bse.
 
-"></head><body>
+"><script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"; mermaid.initialize({ startOnLoad: true, theme: "neutral" });</script></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -52,6 +52,61 @@ For Equity$search(), check whether a symbol is listed on both the nse and the bs
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Get started</h6></li>
+    <li><a class="dropdown-item" href="../articles/get-started.html">Get started</a></li>
+    <li><a class="dropdown-item" href="../articles/get-started-installation.html">Installation</a></li>
+    <li><a class="dropdown-item" href="../articles/get-started-configuration.html">Configuration</a></li>
+    <li><a class="dropdown-item" href="../articles/get-started-first-steps.html">First steps</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Using tradeR</h6></li>
+    <li><a class="dropdown-item" href="../articles/guide.html">Using tradeR</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-instruments.html">Instruments</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-market-data.html">Market data</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-discovery.html">Finding instruments</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-derivatives.html">Derivatives</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-orders.html">Placing and reading orders</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-price-wrappers.html">Price wrappers</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-positions.html">Positions</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-holdings.html">Holding for the long term</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-synthetic-orders.html">Synthetic orders</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-account.html">The account</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-asset-baskets.html">Asset baskets</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-client.html">The UBI client</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-vocabulary.html">Vocabulary</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-errors.html">Errors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Asset classes</h6></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes.html">Asset classes</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-equities.html">Equities</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-fixed-income.html">Fixed income</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-commodities.html">Commodities</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-currencies.html">Currencies</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-funds.html">Funds and trusts</a></li>
+    <li><a class="dropdown-item" href="../articles/asset-classes-mutual-funds.html">Mutual funds</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Analysis</h6></li>
+    <li><a class="dropdown-item" href="../articles/analysis.html">Analysis</a></li>
+    <li><a class="dropdown-item" href="../articles/analysis-indicators.html">Indicators</a></li>
+    <li><a class="dropdown-item" href="../articles/analysis-patterns.html">Candlestick patterns</a></li>
+    <li><a class="dropdown-item" href="../articles/analysis-statistics.html">Statistics and transforms</a></li>
+    <li><a class="dropdown-item" href="../articles/analysis-signals-and-backtests.html">Signals and backtests</a></li>
+    <li><a class="dropdown-item" href="../articles/analysis-performance.html">Performance measures</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Architecture</h6></li>
+    <li><a class="dropdown-item" href="../articles/architecture.html">Architecture</a></li>
+    <li><a class="dropdown-item" href="../articles/architecture-instrument-model.html">The instrument model</a></li>
+    <li><a class="dropdown-item" href="../articles/architecture-order-engine.html">Order engine</a></li>
+    <li><a class="dropdown-item" href="../articles/architecture-design-choices.html">Design choices</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Project</h6></li>
+    <li><a class="dropdown-item" href="../articles/project.html">Project</a></li>
+    <li><a class="dropdown-item" href="../articles/project-structure.html">Repository structure</a></li>
+    <li><a class="dropdown-item" href="../articles/project-adding-an-asset-class.html">Adding an asset class</a></li>
+    <li><a class="dropdown-item" href="../articles/project-writing-docs.html">Writing these docs</a></li>
+  </ul></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
 <li class="nav-item"><a class="external-link nav-link" href="https://github.com/pramodathani/tradeR/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
