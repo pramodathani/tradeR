@@ -9,4 +9,9 @@
 #'
 #' @keywords internal
 #' @importFrom R6 R6Class
+#' @importFrom dotenv load_dot_env
+#' @importFrom httr2 request
+#' @importFrom jsonlite toJSON
+#' @importFrom mongolite mongo
+#' @importFrom talib RSI
 "_PACKAGE"
