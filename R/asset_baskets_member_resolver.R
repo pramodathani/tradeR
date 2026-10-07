@@ -37,7 +37,7 @@ MemberResolver <- R6::R6Class(
     #' Initialises the resolver with the client it sends requests through.
     #' @param unified_broker_interface The `UnifiedBrokerInterface` to use, or `NULL` to share the one every instrument uses.
     #' @return A new `MemberResolver` object.
-    #' @details Errors: signals `ValueError` when no client was given and the shared client's base url or MongoDB credentials are not configured.
+    #' @details Errors: signals a plain error when no client was given and the shared client's base url or MongoDB credentials are not configured.
     initialize = function(unified_broker_interface = NULL) {
       if (is.null(unified_broker_interface)) {
         unified_broker_interface <- Instrument$shared_unified_broker_interface()

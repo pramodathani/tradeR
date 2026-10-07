@@ -114,12 +114,12 @@ tryCatch(
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{unified_broker_interface}}{The \code{UnifiedBrokerInterface} to use, or \code{NULL} to share the one every instrument uses, which is almost always right because a second client would log the instruments out.}
+      \item{\code{unified_broker_interface}}{The \code{UnifiedBrokerInterface} to use, or \code{NULL} to share the one every instrument uses, which is almost always right because one shared client keeps one cached access token and one place that reconnects after HTTP 401.}
     }
     \if{html}{\out{</div>}}
   }
   \subsection{Details}{
-    Errors: signals \code{ValueError} when no client was given and the shared client's base url or MongoDB credentials are not configured.
+    Errors: signals a plain error when no client was given and the shared client's base url or MongoDB credentials are not configured.
   }
   \subsection{Returns}{
     A new \code{Account} object.

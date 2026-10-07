@@ -332,7 +332,7 @@ A row is marked when, on the previous row, the first column was at or below the 
     \if{html}{\out{</div>}}
   }
   \subsection{Details}{
-    Errors: signals a plain error when \code{data} has no column named \code{first_column} or \code{second_column}.
+    Errors: signals \code{KeyError} when \code{data} has no column named \code{first_column} or \code{second_column}.
   }
   \subsection{Returns}{
     A \code{data.frame} copy of \code{data} with fresh row names and an added logical \code{cross_over} column.
@@ -402,7 +402,7 @@ A row is marked when, on the previous row, the first column was at or above the 
     \if{html}{\out{</div>}}
   }
   \subsection{Details}{
-    Errors: signals a plain error when \code{data} has no column named \code{first_column} or \code{second_column}.
+    Errors: signals \code{KeyError} when \code{data} has no column named \code{first_column} or \code{second_column}.
   }
   \subsection{Returns}{
     A \code{data.frame} copy of \code{data} with fresh row names and an added logical \code{cross_under} column.

@@ -124,7 +124,7 @@ cat(class(same_index)[[1]], same_index$symbol, "\n")
     \if{html}{\out{</div>}}
   }
   \subsection{Details}{
-    Errors: signals \code{ValueError} when no client was given and the shared client's base url or MongoDB credentials are not configured.
+    Errors: signals a plain error when no client was given and the shared client's base url or MongoDB credentials are not configured.
   }
   \subsection{Returns}{
     A new \code{MemberResolver} object.

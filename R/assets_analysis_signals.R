@@ -26,7 +26,7 @@ Signals <- R6::R6Class(
     #' @param first_column The character name of the column that crosses.
     #' @param second_column The character name of the column that is crossed.
     #' @return A `data.frame` copy of `data` with fresh row names and an added logical `cross_over` column.
-    #' @details Errors: signals a plain error when `data` has no column named `first_column` or `second_column`.
+    #' @details Errors: signals `KeyError` when `data` has no column named `first_column` or `second_column`.
     #' @examples
     #' \dontrun{
     #' infosys <- Equity$new(exchange = "nse", symbol = "INFY")
@@ -88,7 +88,7 @@ Signals <- R6::R6Class(
     #' @param first_column The character name of the column that crosses.
     #' @param second_column The character name of the column that is crossed.
     #' @return A `data.frame` copy of `data` with fresh row names and an added logical `cross_under` column.
-    #' @details Errors: signals a plain error when `data` has no column named `first_column` or `second_column`.
+    #' @details Errors: signals `KeyError` when `data` has no column named `first_column` or `second_column`.
     #' @examples
     #' \dontrun{
     #' infosys <- Equity$new(exchange = "nse", symbol = "INFY")
@@ -151,7 +151,7 @@ Signals <- R6::R6Class(
     # @param first_column The character name of the first column.
     # @param second_column The character name of the second column.
     # @return `NULL`, invisibly, when both columns are present.
-    # @details Errors: signals a plain error naming the first column that `data` lacks, where Python raises `KeyError`.
+    # @details Errors: signals `KeyError` naming the first column that `data` lacks, as Python does.
     check_columns = function(data, first_column, second_column) {
       columns <- c(
         first_column,
