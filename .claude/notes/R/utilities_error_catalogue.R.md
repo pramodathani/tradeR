@@ -17,3 +17,4 @@ The parents come from four tables, one per Python exceptions module plus one for
 `raise(..., parent = error)` stores the caught condition, the R counterpart of Python's `raise ... from error`, so the original UBI failure stays reachable from a family error such as `EquityError`.
 
 `NotImplementedError` joined the language table on 2026-10-07, for `PlanPart$document()` on the plan part base class.
+`KeyError` joined on 2026-10-07, for `Watchlist$rank_by()` with an unknown column, where Python raises pandas' `KeyError`.
