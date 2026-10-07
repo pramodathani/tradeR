@@ -97,7 +97,7 @@ sudo apt install -y libcurl4-openssl-dev libssl-dev libsasl2-dev libuv1-dev libg
    ```
 
 > [!NOTE]
-> UBI holds one access token for the whole application, so every connection replaces the one in force and ends any other client's session, including a running Python script that uses `tradingmachine`. If a long-running script suddenly starts seeing 401s, something else connected.
+> UBI holds one access token for the whole application, and every client shares it. Connecting hands back that token, so an R session and a running Python script that uses `tradingmachine` work side by side. Calling `disconnect()` revokes the token and ends every client's session, so if a long-running script suddenly starts seeing 401s, something else disconnected.
 
 ## Tests
 

@@ -6,7 +6,7 @@
 \description{
 A thin REST client for the Unified Broker Interface (UBI). It reads its api key and secret from the \code{settings} collection of the project's MongoDB, exchanges them for an access token on the first request, sends that token with every request, reconnects and retries once when UBI answers HTTP 401, and turns every other failing status code into its own error class from \code{UNIFIED_BROKER_INTERFACE_ERROR_FOR_STATUS_CODE}.
 
-UBI holds one access token for the whole application, so every \code{connect()} replaces the one in force and ends any other client's session. Instruments therefore share one client, which \code{Instrument$shared_unified_broker_interface()} creates on first use.
+UBI holds one access token for the whole application, and every client shares it: \code{connect()} hands back the token in force, so other clients, such as a running Python script, keep working. \code{disconnect()} revokes that token and so ends every client's session. Instruments share one client, which \code{Instrument$shared_unified_broker_interface()} creates on first use.
 }
 \examples{
 \dontrun{
@@ -74,7 +74,7 @@ client$get("/api/instruments/ltp", params = list(instrument_id = "..."))
 \if{html}{\out{<a id="method-UnifiedBrokerInterface-connect"></a>}}
 \if{latex}{\out{\hypertarget{method-UnifiedBrokerInterface-connect}{}}}
 \subsection{\code{UnifiedBrokerInterface$connect()}}{
-  Exchanges the api key and secret for a new access token, ending any other client's session.
+  Exchanges the api key and secret for UBI's access token, which every client shares, so other clients keep working.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{UnifiedBrokerInterface$connect()}
@@ -92,7 +92,7 @@ client$get("/api/instruments/ltp", params = list(instrument_id = "..."))
 \if{html}{\out{<a id="method-UnifiedBrokerInterface-disconnect"></a>}}
 \if{latex}{\out{\hypertarget{method-UnifiedBrokerInterface-disconnect}{}}}
 \subsection{\code{UnifiedBrokerInterface$disconnect()}}{
-  Revokes the access token in force on the server.
+  Revokes the access token in force on the server, which ends every client's session, including other R sessions and Python scripts.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{UnifiedBrokerInterface$disconnect()}

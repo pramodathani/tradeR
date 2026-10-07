@@ -6,7 +6,7 @@ Port of `src/tradingmachine/accounts/account.py`, written on 2026-10-07.
 
 ## The shared client
 
-`Account$new()` takes the client from `Instrument$shared_unified_broker_interface()`. UBI holds one access token and every connect replaces it, so an `Account` with a client of its own would log every instrument out on its first request.
+`Account$new()` takes the client from `Instrument$shared_unified_broker_interface()`. Sharing the client means the session holds one cached token and one place to reconnect after a 401, the same arrangement as the Python library.
 
 ## `confirm` is typed by the caller
 
