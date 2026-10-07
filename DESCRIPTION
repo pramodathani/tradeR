@@ -1,0 +1,31 @@
+Package: tradeR
+Title: Indian Market Instruments as R Objects Through the Unified Broker Interface
+Version: 0.1.0
+Authors@R:
+    person(
+      given = "Pramod",
+      family = "Athani",
+      email = "pramod.r.athani@gmail.com",
+      role = c(
+        "aut",
+        "cre"
+      )
+    )
+Description: An Indian market instrument is an R object. Name a share, a futures contract or an option once, and from that one object get its candles, its live quote, its order book, its analysis methods, the orders placed in it, the positions held in it and the units of it held in a demat account. Every request goes to the Unified Broker Interface, a REST service running on the same machine that speaks to ten Indian retail brokers. This package is a native R port of the Python library tradingmachine.
+License: file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE, r6 = TRUE)
+RoxygenNote: 7.3.3
+Depends:
+    R (>= 4.3)
+Imports:
+    dotenv,
+    httr2,
+    jsonlite,
+    mongolite,
+    R6,
+    talib
+Suggests:
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3

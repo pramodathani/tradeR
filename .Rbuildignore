@@ -1,0 +1,10 @@
+^\.claude$
+^\.env$
+^\.env\..*$
+^CLAUDE\.md$
+^README\.Rmd$
+^\.Rproj\.user$
+^.*\.Rproj$
+^docs$
+^_pkgdown\.yml$
+^bin$
