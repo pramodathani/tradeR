@@ -4,7 +4,7 @@ The package is named `tradeR`, the name of the repository the user created on 20
 
 ## Licence
 
-The Python library `tradingmachine` deliberately declares no licence until the user chooses one. R CMD check refuses a package with no `License` field at all, so `License: file LICENSE` points at a one-line `LICENSE` stating that no licence has been chosen and all rights are reserved. Replace both when the user picks one.
+The user chose the MIT licence on 2026-10-07, when the repository was made public on GitHub. It follows the layout `usethis::use_mit_license()` produces: `License: MIT + file LICENSE` in `DESCRIPTION`, a two-line `LICENSE` giving the year and copyright holder as CRAN's MIT template requires, and the full text in `LICENSE.md`, which GitHub reads to label the repository and `.Rbuildignore` keeps out of the built package. The Python library `tradingmachine` still declares no licence.
 
 ## Dependencies
 
