@@ -15,7 +15,7 @@ Like the Python library, nothing here talks to a broker. Every request goes to t
 This package places real orders with real money, exactly as the Python library does.
 
 - During development, never call a method that places, modifies or cancels an order against the live UBI unless it is a dry run, with `dry_run = TRUE`. Never call `flatten`, the holdings methods, `rebalance` or `place_orders` against the live UBI.
-- UBI holds one access token that every client shares. Connecting hands back that token and leaves other clients, such as a running Python script, working. Never call `disconnect()` against the live UBI, because it revokes the token and logs out every client. Ask the user before connecting to the live UBI.
+- UBI holds one access token that every client shares. A connect hands back the token in force when it was issued at or after the most recent 07:00 and has not expired, which leaves other clients, such as a running Python script, working; only the first connect after 07:00 on an older token mints a new one. Never call `disconnect()` against the live UBI, because it revokes the token and logs out every client. Ask the user before connecting to the live UBI.
 - Tests use mocked HTTP responses through `httr2::local_mocked_responses()`, so `devtools::test()` never reaches UBI.
 
 ## Mapping Python to R

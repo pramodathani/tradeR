@@ -7,7 +7,7 @@ CLIENT_SETTINGS_COLLECTION <- "settings"
 #' @description
 #' A thin REST client for the Unified Broker Interface (UBI). It reads its api key and secret from the `settings` collection of the project's MongoDB, exchanges them for an access token on the first request, sends that token with every request, reconnects and retries once when UBI answers HTTP 401, and turns every other failing status code into its own error class from `UNIFIED_BROKER_INTERFACE_ERROR_FOR_STATUS_CODE`.
 #'
-#' UBI holds one access token for the whole application, and every client shares it: `connect()` hands back the token in force, so other clients, such as a running Python script, keep working. `disconnect()` revokes that token and so ends every client's session. Instruments share one client, which `Instrument$shared_unified_broker_interface()` creates on first use.
+#' UBI holds one access token for the whole application, and every client shares it. `connect()` hands back the token in force when it was issued at or after the most recent 07:00 and has not expired, so other clients, such as a running Python script, keep working. Only the first `connect()` after 07:00 on an older token mints a new one, and `disconnect()` revokes the token for everyone; a client holding the old token then gets HTTP 401, which this client answers by connecting again and retrying once. Instruments share one client, which `Instrument$shared_unified_broker_interface()` creates on first use.
 #'
 #' @examples
 #' \dontrun{
@@ -60,7 +60,7 @@ UnifiedBrokerInterface <- R6::R6Class(
     },
 
     #' @description
-    #' Exchanges the api key and secret for UBI's access token, which every client shares, so other clients keep working.
+    #' Exchanges the api key and secret for UBI's shared access token: the one in force when it was issued at or after the most recent 07:00 and has not expired, or else a new one that other clients must reconnect to get.
     #' @return The character access token.
     #' @details Errors: signals `AuthenticationError` when UBI refuses the key or secret, another `UnifiedBrokerInterfaceError` subclass for any other failing status, and `UnreachableError` when UBI cannot be reached.
     connect = function() {

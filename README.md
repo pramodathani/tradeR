@@ -97,7 +97,7 @@ sudo apt install -y libcurl4-openssl-dev libssl-dev libsasl2-dev libuv1-dev libg
    ```
 
 > [!NOTE]
-> UBI holds one access token for the whole application, and every client shares it. Connecting hands back that token, so an R session and a running Python script that uses `tradingmachine` work side by side. Calling `disconnect()` revokes the token and ends every client's session, so if a long-running script suddenly starts seeing 401s, something else disconnected.
+> UBI holds one access token for the whole application, and every client shares it. A connect hands back the token in force when it was issued at or after the most recent 07:00 and has not expired, so an R session and a running Python script that uses `tradingmachine` work side by side. Only the first connect after 07:00 on an older token mints a new one, and `disconnect()` revokes the token for everyone; other clients then get HTTP 401, and this package and `tradingmachine` both reconnect and retry once. If a long-running script keeps seeing 401s, something else disconnected. UBI's [How the token lives and dies](https://pramodathani.github.io/unified_broker_interface/rest-api/session/#how-the-token-lives-and-dies) has the full rules.
 
 ## Tests
 
