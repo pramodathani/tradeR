@@ -13,3 +13,7 @@ Python's `dotenv.load_dotenv` leaves a variable that is already set alone. The R
 ## The connection string with a missing host
 
 Python builds the URI with an f-string, so a missing host or port appears as the text `None`. `text_or_none` keeps that, so the two libraries fail with the same message when MongoDB is not configured.
+
+## Encoding the username and password
+
+Python uses `urllib.parse.quote_plus`, which writes a space as `+`; pymongo decodes the URI with `unquote_plus`, so that round-trips. mongolite hands the URI to the MongoDB C driver, which percent-decodes only, so a `+` would reach the server as a literal plus sign. `utils::URLencode(reserved = TRUE)` writes a space as `%20` instead, which both drivers decode correctly. Every other reserved character, such as `@` and `:`, is encoded the same way by both.
