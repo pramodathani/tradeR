@@ -1,0 +1,267 @@
+---
+title: "Using tradeR"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+This section of the site is the guide to every public class and member of the `tradeR` package, laid out like Zerodha's Kite Connect documentation: each guide page opens with a summary table, then gives each member its own section with its arguments, an example, what it returns and what it signals. This page is the index of all of them, one table per page, so you can find any member in one scroll. The [reference section](../reference/index.html) holds the roxygen2 documentation of every class, generated from the package source.
+
+The package is an R face on the [Unified Broker Interface](https://pramodathani.github.io/unified_broker_interface/) (UBI), a REST API that combines ten Indian stock brokers into one account. It is a native R port of the Python library `tradingmachine`, with the same classes, members and argument names, so code moves between the two by writing `$` where Python writes `.`. Almost every member here sends one request to UBI, and each member's section names the UBI route it calls.
+
+## How to read the kinds
+
+Every member in the tables below has a kind, which says what sort of thing it is. The kind matters most for "places orders", because those members send real orders to real brokers. The table below explains each kind.
+
+| Kind | Meaning |
+|---|---|
+| active binding | Reads a value from UBI each time you access it, and never writes anything. It is written without brackets: `instrument$last_price`. Assigning to it signals an error. |
+| method | Takes arguments and reads only. It is written with brackets: `instrument$prices(days = 10)`. |
+| generator function | Called on the class generator rather than on an instrument, to find instruments: `Equity$search("nse", "RELI")`. It stands in for a Python class method. |
+| places orders | Sends orders to a broker, or cancels or changes them. These act on real money. |
+| class | An R6 class you construct with `$new()`. |
+
+The rule behind the first two kinds is the package's own, inherited from the Python library: anything that only reports a value is an active binding, and only members that take an argument or write to the market are methods.
+
+## Where the members are
+
+The table below counts the members documented on each guide page, which shows where the bulk of the package's surface is. The 32 price wrappers are the largest group, because each names one place a price can come from, and the 24 contract members on Derivatives come second, most of them on options.
+
+| Guide page | Public members |
+|---|---:|
+| [Price wrappers](guide-price-wrappers.html) | 32 |
+| [Derivatives](guide-derivatives.html) | 24 |
+| [Market data](guide-market-data.html) | 15 |
+| [Orders](guide-orders.html) | 15 |
+| [Positions](guide-positions.html) | 8 |
+| [The UBI client](guide-client.html) | 8 |
+| [Holdings](guide-holdings.html) | 6 |
+| [Finding instruments](guide-discovery.html) | 5 |
+| [The account](guide-account.html) | 3 |
+| [Instruments](guide-instruments.html) | 3 |
+
+Three pages hold classes rather than members. [Synthetic orders](guide-synthetic-orders.html) documents the synthetic order classes in the `R/orders_*.R` files, one for each type UBI's order engine runs, [Instruments](guide-instruments.html) documents the 27 instrument classes, and [Asset baskets](guide-asset-baskets.html) documents the five kinds of basket in the `R/asset_baskets_*.R` files and the classes that store them. The fourteen classes of candle analysis, 209 methods from indicators to the performance measures, have their own [Analysis](analysis.html) section, and every instrument and every basket inherits them.
+
+## Instruments
+
+An instrument is looked up once when you construct it, and from then on every member reads from UBI. The [Instruments](guide-instruments.html) page documents the 27 classes, such as `Equity$new("nse", "RELIANCE")` or `EquityIndexOption$new("nse", "NIFTY", "2026-09-29", 25000, "CE")`, and the fields the lookup fills in. The first two members below belong to every instrument class, and the third only to indices and funds. `set_shared_unified_broker_interface()` has no Python counterpart; it was added in the R port so that a script or a test can install a client of its own, such as one built with `credentials`.
+
+| Kind | Member | Description |
+|---|---|---|
+| generator function | [`Instrument$shared_unified_broker_interface()`](guide-instruments.html#shared_unified_broker_interface) | Returns the one client all instruments share, creating it on first use. |
+| generator function | [`Instrument$set_shared_unified_broker_interface()`](../reference/Instrument.html) | Installs a client of your choosing as the one all instruments share. |
+| active binding | [`constituents`](guide-instruments.html#constituents) | The stored basket of what an index, an exchange traded fund or a mutual fund holds, on the four index classes, `ExchangeTradedFund` and `MutualFund`. |
+
+## Market data
+
+These members read candles, quotes and the order book. The first four work on every instrument; the order-book values exist only on instruments that can be traded, because an index has no order book.
+
+| Kind | Member | Description |
+|---|---|---|
+| method | [`prices()`](guide-market-data.html#prices) | Fetches the instrument's candles for a range from UBI. |
+| active binding | [`quote`](guide-market-data.html#quote) | The instrument's full unified quote, read from UBI on every access. |
+| active binding | [`last_price`](guide-market-data.html#last_price) | The instrument's last traded price, read from UBI on every access. |
+| active binding | [`ohlc`](guide-market-data.html#ohlc) | The day's open, high and low with the last and previous close prices, read from UBI on every access. |
+| active binding | [`bids`](guide-market-data.html#bids) | The buy side of the order book, read from UBI on every access. |
+| active binding | [`offers`](guide-market-data.html#offers) | The sell side of the order book, read from UBI on every access. |
+| active binding | [`best_bid`](guide-market-data.html#best_bid) | The highest bid in the order book. |
+| active binding | [`best_offer`](guide-market-data.html#best_offer) | The lowest offer in the order book. |
+| active binding | [`bid_offer_spread`](guide-market-data.html#bid_offer_spread) | The gap between the best offer and the best bid, measured from one quote. |
+| active binding | [`mid_price`](guide-market-data.html#mid_price) | The price halfway between the best bid and the best offer, from one quote. |
+| active binding | [`volume_weighted_average_price`](guide-market-data.html#volume_weighted_average_price) | Today's volume weighted average price. |
+| active binding | [`last_quantity`](guide-market-data.html#last_quantity) | The quantity of the last trade. |
+| active binding | [`total_traded_volume`](guide-market-data.html#total_traded_volume) | The quantity traded so far today. |
+| active binding | [`open_interest`](guide-market-data.html#open_interest) | The open interest of a future or an option. |
+| active binding | [`last_trade_time`](guide-market-data.html#last_trade_time) | When the last trade happened. |
+
+## Finding instruments
+
+These generator functions find instruments rather than read one. `search()` exists on the cash and index classes, and the other four exist on every derivative class's generator, each of which names its own segment. In Python they are defined once on the `Futures` and `Option` base classes and inherited; R6 generators do not inherit functions, so the R port writes them out on each class, and `Futures$expiries()` and the other functions on the base classes only signal an error, as calling them on the Python base classes does.
+
+| Kind | Member | Description |
+|---|---|---|
+| generator function | [`search()`](guide-discovery.html#search) | Finds listed instruments whose symbol contains a term, on the cash and index classes. |
+| generator function | [`expiries()`](guide-discovery.html#expiries) | Lists the expiry dates a derivative is listed for. |
+| generator function | [`contracts()`](guide-discovery.html#contracts) | Lists the contracts on an underlying as a data frame of identities. |
+| generator function | [`strikes()`](guide-discovery.html#strikes) | Lists the strike prices listed on one underlying for one expiry. |
+| generator function | [`chain()`](guide-discovery.html#chain) | Lists every option listed on one underlying for one expiry. |
+
+## Derivatives
+
+These members report what a futures or option contract has and a share does not: its expiry, its underlying, its basis, and for an option its moneyness, implied volatility and greeks. They are defined on the derivative base classes and inherited by all sixteen futures and option classes, and none of them places an order. Those marked futures or options exist only on that kind of contract.
+
+| Kind | Member | Description |
+|---|---|---|
+| active binding | [`days_to_expiry`](guide-derivatives.html#days_to_expiry) | The calendar days left until the contract expires. |
+| active binding | [`expired`](guide-derivatives.html#expired) | Whether the expiry date has passed. |
+| active binding | [`expiry_kind`](guide-derivatives.html#expiry_kind) | Whether the contract is the month's last expiry or a weekly one. |
+| active binding | [`next_expiry`](guide-derivatives.html#next_expiry) | The next expiry after this one, where a position rolls to. |
+| active binding | [`underlying`](guide-derivatives.html#underlying) | The underlying instrument, built afresh on every read. |
+| active binding | [`underlying_price`](guide-derivatives.html#underlying_price) | The underlying's last traded price. |
+| active binding | [`open_interest_day_high`](guide-derivatives.html#open_interest_day_high) | The highest open interest reached today. |
+| active binding | [`open_interest_day_low`](guide-derivatives.html#open_interest_day_low) | The lowest open interest reached today. |
+| active binding | [`contract_value`](guide-derivatives.html#contract_value) | What one lot is worth at the last price. |
+| active binding | [`basis`](guide-derivatives.html#basis) | How far a future's price is above its underlying's. Futures only. |
+| active binding | [`basis_percent`](guide-derivatives.html#basis_percent) | The basis as a percentage of the underlying's price. Futures only. |
+| active binding | [`cost_of_carry`](guide-derivatives.html#cost_of_carry) | The basis as a yearly rate. Futures only. |
+| active binding | [`is_call`](guide-derivatives.html#is_call), [`is_put`](guide-derivatives.html#is_put) | Whether an option is a call or a put. Options only. |
+| active binding | [`intrinsic_value`](guide-derivatives.html#intrinsic_value) | What the option would be worth if exercised now. Options only. |
+| active binding | [`time_value`](guide-derivatives.html#time_value) | The part of the premium above the intrinsic value. Options only. |
+| active binding | [`in_the_money`](guide-derivatives.html#in_the_money) | Whether the option has intrinsic value. Options only. |
+| active binding | [`moneyness_percent`](guide-derivatives.html#moneyness_percent) | How far in or out of the money the option is, in per cent. Options only. |
+| active binding | [`breakeven_price`](guide-derivatives.html#breakeven_price) | The underlying price at which a buyer breaks even at expiry. Options only. |
+| active binding | [`premium_per_lot`](guide-derivatives.html#premium_per_lot) | What one lot costs to buy. Options only. |
+| active binding | [`notional_value`](guide-derivatives.html#notional_value) | What one lot controls at the strike price. Options only. |
+| method | [`implied_volatility()`](guide-derivatives.html#implied_volatility) | The volatility the option's price implies. Options only. |
+| method | [`greeks()`](guide-derivatives.html#greeks) | The option's fair price, delta, gamma, theta, vega and rho. Options only. |
+
+## Orders
+
+::: {.alert .alert-danger}
+**The members that place orders send real orders.**
+
+Members of the kind "places orders" send orders through UBI to real brokers, with real money. Pass `dry_run = TRUE` to `place_order()`, `modify_order()` or `cancel_order()` to have UBI check an order and show the request it would send, without sending it.
+:::
+
+These members place, change and cancel orders in one instrument, read that instrument's rows out of the day's order book and trade book, and read the order engine's parents, which are the synthetic orders and held limit orders UBI is working.
+
+| Kind | Member | Description |
+|---|---|---|
+| places orders | [`place_order()`](guide-orders.html#place_order) | Places one order in this instrument through UBI. |
+| places orders | [`modify_order()`](guide-orders.html#modify_order) | Changes one pending order through UBI. |
+| places orders | [`cancel_order()`](guide-orders.html#cancel_order) | Cancels one pending order through UBI. |
+| places orders | [`cancel_open_orders()`](guide-orders.html#cancel_open_orders) | Cancels every order in this instrument that is still waiting, whether at a broker or held in UBI's order engine. |
+| places orders | [`cancel_parent()`](guide-orders.html#cancel_parent) | Cancels one of the order engine's parents, with every leg it still has resting at a broker, or one part of a plan. |
+| active binding | [`orders`](guide-orders.html#orders) | Every one of today's orders in this instrument, whatever its status. |
+| active binding | [`open_orders`](guide-orders.html#open_orders) | Today's orders in this instrument that can still be changed. |
+| active binding | [`completed_orders`](guide-orders.html#completed_orders) | Today's orders in this instrument that filled in full. |
+| active binding | [`rejected_orders`](guide-orders.html#rejected_orders) | Today's orders in this instrument that a broker or the exchange refused. |
+| active binding | [`cancelled_orders`](guide-orders.html#cancelled_orders) | Today's orders in this instrument that were cancelled. |
+| active binding | [`trades`](guide-orders.html#trades) | Today's trades in this instrument. |
+| active binding | [`parents`](guide-orders.html#parents) | This instrument's synthetic orders and held orders that the order engine has not finished. |
+| method | [`parent()`](guide-orders.html#parent) | Reads one of the order engine's parents, whether or not it has finished. |
+| method | [`parent_orders()`](guide-orders.html#parent_orders) | Today's broker orders that one parent placed. |
+| method | [`parent_trades()`](guide-orders.html#parent_trades) | Today's trades in the broker orders that one parent placed. |
+
+## Price wrappers
+
+Each wrapper is `place_order()` with the price source written into its name, so `buy_at_best_bid_price(quantity = 1, product = "cnc")` joins the queue at the best bid. Apart from the market and limit pairs, UBI works out the price itself when it sends the order. The sixteen wrappers below name a single price.
+
+| Kind | Member | Description |
+|---|---|---|
+| places orders | [`buy_at_market_price()`](guide-price-wrappers.html#buy_at_market_price) | Buys at whatever price the market is asking. |
+| places orders | [`sell_at_market_price()`](guide-price-wrappers.html#sell_at_market_price) | Sells at whatever price the market is bidding. |
+| places orders | [`buy_at_limit_price()`](guide-price-wrappers.html#buy_at_limit_price) | Buys at a price of your choosing, or better. |
+| places orders | [`sell_at_limit_price()`](guide-price-wrappers.html#sell_at_limit_price) | Sells at a price of your choosing, or better. |
+| places orders | [`buy_at_best_bid_price()`](guide-price-wrappers.html#buy_at_best_bid_price) | Buys patiently, joining the queue at the highest price anyone is bidding. |
+| places orders | [`buy_at_best_offer_price()`](guide-price-wrappers.html#buy_at_best_offer_price) | Buys at once, by crossing the spread to the lowest price anyone is offering. |
+| places orders | [`sell_at_best_offer_price()`](guide-price-wrappers.html#sell_at_best_offer_price) | Sells patiently, joining the queue at the lowest price anyone is offering. |
+| places orders | [`sell_at_best_bid_price()`](guide-price-wrappers.html#sell_at_best_bid_price) | Sells at once, by crossing the spread to the highest price anyone is bidding. |
+| places orders | [`buy_at_mid_price()`](guide-price-wrappers.html#buy_at_mid_price) | Buys halfway between the best bid and the best offer. |
+| places orders | [`sell_at_mid_price()`](guide-price-wrappers.html#sell_at_mid_price) | Sells halfway between the best bid and the best offer. |
+| places orders | [`buy_at_volume_weighted_average_price()`](guide-price-wrappers.html#buy_at_volume_weighted_average_price) | Buys at the average price the day has traded at so far. |
+| places orders | [`sell_at_volume_weighted_average_price()`](guide-price-wrappers.html#sell_at_volume_weighted_average_price) | Sells at the average price the day has traded at so far. |
+| places orders | [`buy_at_marketable_price()`](guide-price-wrappers.html#buy_at_marketable_price) | Buys now with a limit order priced at the best offer, the price it takes to fill immediately. |
+| places orders | [`sell_at_marketable_price()`](guide-price-wrappers.html#sell_at_marketable_price) | Sells now with a limit order priced at the best bid, the price it takes to fill immediately. |
+| places orders | [`buy_at_last_price()`](guide-price-wrappers.html#buy_at_last_price) | Buys with a limit order at the price the instrument last traded at. |
+| places orders | [`sell_at_last_price()`](guide-price-wrappers.html#sell_at_last_price) | Sells with a limit order at the price the instrument last traded at. |
+
+The other sixteen reach deeper into the order book, from the second to the fifth price on each side. They are listed in the collapsed table below, which opens when you click its title.
+
+<details>
+<summary>The sixteen depth-level wrappers</summary>
+
+| Kind | Member | Description |
+|---|---|---|
+| places orders | [`buy_at_second_best_bid_price()`](guide-price-wrappers.html#buy_at_second_best_bid_price) | Buys at the second best price on the buy side of the book. |
+| places orders | [`buy_at_third_best_bid_price()`](guide-price-wrappers.html#buy_at_third_best_bid_price) | Buys at the third best price on the buy side of the book. |
+| places orders | [`buy_at_fourth_best_bid_price()`](guide-price-wrappers.html#buy_at_fourth_best_bid_price) | Buys at the fourth best price on the buy side of the book. |
+| places orders | [`buy_at_fifth_best_bid_price()`](guide-price-wrappers.html#buy_at_fifth_best_bid_price) | Buys at the fifth best price on the buy side of the book. |
+| places orders | [`sell_at_second_best_bid_price()`](guide-price-wrappers.html#sell_at_second_best_bid_price) | Sells at the second best price on the buy side of the book. |
+| places orders | [`sell_at_third_best_bid_price()`](guide-price-wrappers.html#sell_at_third_best_bid_price) | Sells at the third best price on the buy side of the book. |
+| places orders | [`sell_at_fourth_best_bid_price()`](guide-price-wrappers.html#sell_at_fourth_best_bid_price) | Sells at the fourth best price on the buy side of the book. |
+| places orders | [`sell_at_fifth_best_bid_price()`](guide-price-wrappers.html#sell_at_fifth_best_bid_price) | Sells at the fifth best price on the buy side of the book. |
+| places orders | [`buy_at_second_best_offer_price()`](guide-price-wrappers.html#buy_at_second_best_offer_price) | Buys at the second best price on the sell side of the book. |
+| places orders | [`buy_at_third_best_offer_price()`](guide-price-wrappers.html#buy_at_third_best_offer_price) | Buys at the third best price on the sell side of the book. |
+| places orders | [`buy_at_fourth_best_offer_price()`](guide-price-wrappers.html#buy_at_fourth_best_offer_price) | Buys at the fourth best price on the sell side of the book. |
+| places orders | [`buy_at_fifth_best_offer_price()`](guide-price-wrappers.html#buy_at_fifth_best_offer_price) | Buys at the fifth best price on the sell side of the book. |
+| places orders | [`sell_at_second_best_offer_price()`](guide-price-wrappers.html#sell_at_second_best_offer_price) | Sells at the second best price on the sell side of the book. |
+| places orders | [`sell_at_third_best_offer_price()`](guide-price-wrappers.html#sell_at_third_best_offer_price) | Sells at the third best price on the sell side of the book. |
+| places orders | [`sell_at_fourth_best_offer_price()`](guide-price-wrappers.html#sell_at_fourth_best_offer_price) | Sells at the fourth best price on the sell side of the book. |
+| places orders | [`sell_at_fifth_best_offer_price()`](guide-price-wrappers.html#sell_at_fifth_best_offer_price) | Sells at the fifth best price on the sell side of the book. |
+
+</details>
+
+## Positions
+
+These members act on this instrument's positions without being told which side you are on, so a long position is reduced by selling and a short one by buying.
+
+| Kind | Member | Description |
+|---|---|---|
+| active binding | [`net_positions`](guide-positions.html#net_positions) | The positions held in this instrument now, merged across every broker. |
+| active binding | [`day_positions`](guide-positions.html#day_positions) | Today's own positions in this instrument, without what was carried in. |
+| active binding | [`positions_value`](guide-positions.html#positions_value) | What this instrument's open positions are worth at the moment. |
+| active binding | [`positions_pnl`](guide-positions.html#positions_pnl) | What this instrument's positions have made or lost. |
+| places orders | [`add_to_position()`](guide-positions.html#add_to_position) | Makes an existing position bigger, or opens a new one. |
+| places orders | [`reduce_position()`](guide-positions.html#reduce_position) | Makes an existing position smaller, without turning it around. |
+| places orders | [`liquidate_position()`](guide-positions.html#liquidate_position) | Closes one position in this instrument completely. |
+| places orders | [`liquidate_all_positions()`](guide-positions.html#liquidate_all_positions) | Closes every position this instrument holds, under every product. |
+
+## Holdings
+
+Holdings are shares kept for the long term in a demat account. Only `Equity`, `FixedIncome`, `ExchangeTradedFund`, `InvestmentTrust` and `MutualFund` carry these six members, and their orders are always sent under the `cnc` product.
+
+| Kind | Member | Description |
+|---|---|---|
+| active binding | [`holdings`](guide-holdings.html#holdings) | The long-term holding of this share, merged across every broker. |
+| active binding | [`holdings_value`](guide-holdings.html#holdings_value) | What the shares held are worth at the moment. |
+| active binding | [`holdings_pnl`](guide-holdings.html#holdings_pnl) | What the shares held have made or lost. |
+| places orders | [`add_to_holdings()`](guide-holdings.html#add_to_holdings) | Buys more of this share to keep. |
+| places orders | [`reduce_holdings()`](guide-holdings.html#reduce_holdings) | Sells some of the shares held, without selling more than are free. |
+| places orders | [`liquidate_holdings()`](guide-holdings.html#liquidate_holdings) | Sells every share held that is free to sell. |
+
+## The account
+
+[`Account`](../reference/Account.html) acts on the whole account rather than on one instrument. It holds the kill switch and two readers of UBI's order engine.
+
+| Kind | Member | Description |
+|---|---|---|
+| places orders | [`flatten()`](guide-account.html#flatten) | Stops every synthetic order, cancels every open order at every broker, then closes every position in the account. |
+| active binding | [`parents`](guide-account.html#parents) | Every synthetic order and held order the order engine has not finished, in every instrument. |
+| method | [`intent()`](guide-account.html#intent) | Reads what the order engine did with one order after its placement stopped waiting. |
+
+## Asset baskets
+
+An asset basket is a group of instruments that is priced, analysed and stored as one, such as a portfolio, a watchlist or what an index or a fund holds. The [Asset baskets](guide-asset-baskets.html) page documents the classes below, each with its own members; two of `Portfolio`'s members place real orders.
+
+| Kind | Member | Description |
+|---|---|---|
+| class | [`AssetBasket`](guide-asset-baskets.html#assetbasket) | The shared base: live prices for every member in one request, weights, correlation, risk, and every analysis method. |
+| class | [`Portfolio`](guide-asset-baskets.html#portfolio) | What you hold, with a quantity per member: its value, its profit and loss, and orders for the whole basket. |
+| places orders | [`Portfolio$place_orders()`](guide-asset-baskets.html#portfolio) | Sends one market order per member, all in one request. |
+| places orders | [`Portfolio$rebalance()`](guide-asset-baskets.html#portfolio) | Sends the buys and sells that give the portfolio another basket's weights. |
+| class | [`Watchlist`](guide-asset-baskets.html#watchlist) | Instruments followed together, each counting equally. |
+| class | [`Index`](guide-asset-baskets.html#index) | A weighted index, published or your own, which can be turned into a portfolio. |
+| class | [`ExchangeTradedFundConstituents`](guide-asset-baskets.html#exchangetradedfundconstituents) | What an exchange traded fund holds, compared with the fund's own price. |
+| class | [`MutualFundConstituents`](guide-asset-baskets.html#mutualfundconstituents) | What a mutual fund holds, the only way to measure one. |
+| class | [`BasketStore`, `BasketCsvImporter`](guide-asset-baskets.html#basketstore-and-basketcsvimporter) | Save and load baskets in MongoDB, and fill them from a CSV file. |
+
+## The UBI client
+
+[`UnifiedBrokerInterface`](../reference/UnifiedBrokerInterface.html) is the HTTP client every instrument shares. You rarely call it directly, but it is how you reach a UBI route the package does not wrap. Unlike the Python client, its `$new()` also takes a `credentials` argument, a named list with `api_key` and `api_secret` that is used instead of reading them from MongoDB.
+
+| Kind | Member | Description |
+|---|---|---|
+| method | [`connect()`](guide-client.html#connect) | Exchanges the api key and secret for a new access token. |
+| method | [`disconnect()`](guide-client.html#disconnect) | Revokes the access token in force on the server. |
+| method | [`status()`](guide-client.html#status) | Reports whether the session is connected and when its token expires. |
+| method | [`get()`](guide-client.html#get) | Sends a GET request. |
+| method | [`post()`](guide-client.html#post) | Sends a POST request. |
+| method | [`put()`](guide-client.html#put) | Sends a PUT request. |
+| method | [`patch()`](guide-client.html#patch) | Sends a PATCH request. |
+| method | [`delete()`](guide-client.html#delete) | Sends a DELETE request. |
+
+## Reference pages
+
+Two pages support all the others. [Vocabulary](guide-vocabulary.html) lists every plain string the package passes through, such as `"buy"`, `"limit"` and `"cnc"`, in the style of Kite's glossary of constants. [Errors](guide-errors.html) lists every error condition, which HTTP status from UBI signals it, and what to do next.

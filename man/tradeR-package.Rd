@@ -12,6 +12,15 @@ Every request goes to the Unified Broker Interface (UBI), a REST service on the 
 
 This package places real orders with real money. There is no paper trading mode and no simulator, and \code{dry_run = TRUE} is the only rehearsal available.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://pramodathani.github.io/tradeR/}
+  \item \url{https://github.com/pramodathani/tradeR}
+  \item Report bugs at \url{https://github.com/pramodathani/tradeR/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Pramod Athani \email{pramod.r.athani@gmail.com}
 

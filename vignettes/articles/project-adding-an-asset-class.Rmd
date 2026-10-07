@@ -1,0 +1,238 @@
+---
+title: "Adding an asset class"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+An asset class in this package is one file in `R/`, named `R/assets_<family>.R`, that puts a named R6 class on each of UBI's segments for that family. Six family files exist today, each a port of one Python family module, and every asset class the old project had is ported. This page is the checklist for the next one, written from how those six were built, so that a new file has the same shape and a reader never has to remember which family is the exception.
+
+A new asset class should normally be added to the Python library first, because the Python library is the specification this package follows. The checklist below is how its R port is then written.
+
+## The shape every file has
+
+Every family file follows the same pattern. The table below shows what each existing file holds, which is what a new one should be compared against. The surprises are recorded in each file's sidecar note under `.claude/notes/R/`.
+
+| File | Classes | Why that many | Holdings members | Main surprise, kept in its note |
+|---|---:|---|---|---|
+| `R/assets_equities.R` | 6 | UBI has six equity segments | `Equity` | none, it is the template |
+| `R/assets_fixed_income.R` | 6 | Six segments, one never filled by any broker | `FixedIncome` | Bonds are named by ISIN, and nothing in the family has candles |
+| `R/assets_commodities.R` | 6 | Six segments | none | Quantity is in quotation units and must be whole lots |
+| `R/assets_currencies.R` | 6 | Six segments, three of them empty on every exchange | none | `lot_size` is not the lot an order is measured against |
+| `R/assets_funds.R` | 2 | UBI has no futures or option segment on a fund or a trust | `ExchangeTradedFund`, `InvestmentTrust` | A trust has no candles |
+| `R/assets_mutual_funds.R` | 1 | One segment, subscribed to rather than traded | `MutualFund` | No quote, so orders need a limit price |
+
+The class diagram below shows the six-class shape of a full family, using the equity family. The cash class inherits `TradeableInstrument` and the index class `NonTradeableInstrument` directly, and the four derivative classes inherit the derivative bases in `R/assets_instruments.R`. Each class signals its own error. The discovery functions, shown as members here, are stored on each class generator rather than inherited, because R6 generators do not inherit functions stored on them; calling `Futures$expiries()` on the base class itself signals `FuturesError`, because the base names no segment.
+
+<pre class="mermaid">
+classDiagram
+    direction LR
+    class TradeableInstrument
+    class NonTradeableInstrument
+    class Futures
+    class Option
+    class IndexFutures
+    class IndexOption
+    class Equity {
+        search()
+        holdings members
+    }
+    class EquityFutures {
+        expiries()
+        contracts()
+    }
+    class EquityOption {
+        expiries()
+        strikes()
+        chain()
+    }
+    class EquityIndex {
+        search()
+    }
+    class EquityIndexFutures {
+        expiries()
+        contracts()
+    }
+    class EquityIndexOption {
+        expiries()
+        strikes()
+        chain()
+    }
+    TradeableInstrument &lt;|-- Equity
+    TradeableInstrument &lt;|-- Futures
+    TradeableInstrument &lt;|-- Option
+    Futures &lt;|-- IndexFutures
+    Option &lt;|-- IndexOption
+    Futures &lt;|-- EquityFutures
+    Option &lt;|-- EquityOption
+    NonTradeableInstrument &lt;|-- EquityIndex
+    IndexFutures &lt;|-- EquityIndexFutures
+    IndexOption &lt;|-- EquityIndexOption
+</pre>
+
+## The checklist
+
+The steps below are in the order they are best done. Each one names the file it touches.
+
+1. **Find the family's segments in UBI.** UBI's canonical segment names are in `stock_brokers/instruments/mapping/utilities/segments.py` in the sibling project. Write down, for each segment, its shape (`security`, `future` or `option`), how many rows each exchange has, whether it is quoted, and whether UBI stores candles for it. Check whether the cash segment is in UBI's `CASH_SEGMENTS`, because only those can ever be reported as a holding. Read the Python family module and its sidecar note too, because the R file must behave the same way.
+2. **Decide the number of classes from UBI, not from what is populated.** Write one class for every segment UBI's vocabulary has for the family, even one no broker fills today; an empty segment fails cleanly on its own. Write fewer only when the segments do not exist at all, as with funds.
+3. **Create the file by copying `R/assets_equities.R`.** Copy it to `R/assets_<family>.R` and rename, rather than factoring anything out of it into a shared base. The working files are never touched when a new one is added. Rewrite each class's roxygen2 title, `@description` and `@examples` for the new family.
+4. **Declare the segment constants.** Put one bare segment name per class at the top of the file as a package-level constant, prefixed with the file's topic so it cannot clash with another family's, such as `EQUITIES_EQUITY_FUTURES_SEGMENT <- "equity_futures"`. Add the family's search limit the same way, such as `EQUITIES_SEARCH_LIMIT <- 50`. These are values this project chooses and reuses, so constants are right here even though UBI's vocabulary is otherwise passed as plain strings.
+5. **Write one R6 class per segment.** The cash class gives `inherit = TradeableInstrument` and the index class `inherit = NonTradeableInstrument`. The four derivative classes inherit `Futures`, `Option`, `IndexFutures` and `IndexOption`. There is no `SEGMENT` field, as Python has, because each discovery function names its segment constant directly. Add the family's four derivative segments to `INSTRUMENTS_UNDERLYING_SEGMENT_FOR_DERIVATIVE_SEGMENT` in `R/assets_instruments.R`, mapping each to its cash or index segment, or to `NULL` when a future has no underlying segment, or `Derivative` will refuse the contracts with `DerivativeError`. Do not add a family-level base or a `ListedSecurity` base.
+6. **Make the constructor take exactly the identity fields.** A security or an index takes `exchange` and `symbol`, a future adds `underlying_symbol` and `expiry_date` in place of `symbol`, and an option adds `strike_price` and `option_type` as well. Every identity argument is required with no default. The only optional arguments are `unified_broker_interface` on every class and, on the four derivative classes, `underlying`, an instrument object the contract keeps and passes to `super$initialize()`. There is no `instrument_id` argument, so there is exactly one way to name a contract.
+7. **Re-signal UBI's not-found as the class's own error, and check the segment.** Wrap `super$initialize()` in `tryCatch(..., InstrumentError = function(error) ...)`, and in the handler call `ErrorCatalogue$raise()` with the class's own error, a self-contained message and `parent = error`, which is the R form of Python's `raise ... from error`. After it, compare `self$segment` with `paste0(self$exchange, "_", <segment constant>)`, the whole prefixed name UBI returns.
+8. **Add the error classes.** Add one entry per new family class to `ASSETS_ERROR_PARENTS` in `R/assets_exceptions.R`, named `<ClassName>Error`, each with `"InstrumentError"` as its parent, so each is a flat sibling directly under `InstrumentError`. Add a matching `\item` to the `@format` list in the same file's roxygen2 block. Do not root the family's errors in the cash class's error, because an index future is not a kind of the cash instrument. `ErrorCatalogue` reads `ASSETS_ERROR_PARENTS`, so a `tryCatch` handler for the new name or for `InstrumentError` works with no other change.
+9. **Add the discovery functions to each class generator.** A cash or index class gets `search`, written after the class as `<Class>$search <- function(exchange, term, limit = <FAMILY>_SEARCH_LIMIT, unified_broker_interface = NULL)`, which creates an `InstrumentCatalogue` and calls its `search()` with the class's own segment constant. A futures class gets `expiries` and `contracts`, and an option class gets `expiries`, `strikes` and `chain`, each calling the matching `InstrumentCatalogue` method with its own segment constant, so a caller still never types a segment string. They must be written out on every class, because R6 generators do not inherit them, and they are described in a bulleted list in the class's `@description`, because roxygen2 documents only R6 members.
+10. **Add holdings members only where UBI can report a holding.** If the cash segment is in `CASH_SEGMENTS`, copy the six holdings members from `Equity` into the cash class: the `holdings`, `holdings_value` and `holdings_pnl` active bindings and the `add_to_holdings()`, `reduce_holdings()` and `liquidate_holdings()` methods, with the `cnc` product fixed in a constant such as `EQUITIES_HOLDINGS_ORDER_PRODUCT`. Give every holdable class all six, even when one of them is awkward for the family, and say so in its documentation rather than leaving it out. Never put holdings on a derivative or an index class.
+11. **Add no local validation.** Do not reject an exchange UBI has no rows for, round a price, or check a lot. UBI's not-found already signals the class's own error, and its order validation is the single source of truth.
+12. **Write complete roxygen2 documentation.** Every class has a title line, a `@description` and `@export`. Every public method has `@description`, one `@param` per argument giving its type, `@return` giving its type, and, when it can signal an error, a `@details` paragraph starting `Errors:` that names each condition class. Every active binding has a `@field` line, and private methods get the same tags written with a plain `#`. Examples go in `@examples` inside `\dontrun{}`, because every example needs the live UBI. No explanatory comments go into the source; the reasoning goes into the note in step 15. Run `devtools::document()` to regenerate `man/` and `NAMESPACE`, and make sure it prints no warnings.
+13. **Write the tests.** Create `tests/testthat/test-assets_<family>.R`, driving each class through `FakeClient` and `FakeDetails` from the test helpers, as `tests/testthat/test-assets_equities.R` does, so the tests never reach UBI. Test at least that each class looks itself up in its own segment and that a wrong instrument becomes the class's own error. Run `Rscript -e 'devtools::load_all(); devtools::test()'` and `Rscript -e 'lintr::lint_package()'`.
+14. **Check it against the real UBI, with permission.** Ask the user before connecting to the live UBI. Then, from a script in a scratch directory, not from the repository, build one contract of every class and record its segment, shape, `lot_size`, `tick_size`, number of brokers in `carried_by`, `last_price` and whether `prices()` returns candles. Send no order.
+15. **Write the sidecar note.** Create `.claude/notes/R/assets_<family>.R.md` with the table of class, base class, UBI segment, shape and constructor arguments; a section for everything that differs from the Python module or from the earlier families and why; and a "Verified on" section holding the table from step 14.
+16. **Update the README.** Add the file to the "Asset families" row of the layer table in `README.md`, which is the home page of this site.
+17. **Add the classes to the site.** Add a reference section for the new classes to `_pkgdown.yml`, or add them to an existing section, because pkgdown refuses to build when an exported help page is missing from the reference index. Write `vignettes/articles/asset-classes-<family>.Rmd` following the existing family articles, add it to the articles menu in `_pkgdown.yml`, and link to it from [Asset classes](asset-classes.html). Update the class counts on [The instrument model](architecture-instrument-model.html) and [Repository structure](project-structure.html), and add the error classes to [Errors](guide-errors.html). Finish with `Rscript -e 'pkgdown::build_site()'` and check that it builds without errors.
+18. **Commit it in coherent pieces.** Commit the new family on its own, keeping the code, tests and note in one commit and the site changes in another, and add a second family only after the first is pushed. That way the shared `R/assets_exceptions.R`, `R/assets_instruments.R` and `_pkgdown.yml` never carry two families' half-finished changes. A push to `main` rebuilds and publishes the site, as [Writing these docs](project-writing-docs.html#publishing) explains.
+
+## A skeleton to start from
+
+The block below is one futures class written the way the checklist asks, for an imaginary family called "example" in a file `R/assets_examples.R`, with its constant and its discovery functions. It is a template to rename, not code that exists in the package.
+
+```{r}
+EXAMPLES_EXAMPLE_FUTURES_SEGMENT <- "example_futures"
+
+#' One futures contract on an example underlying
+#'
+#' @description
+#' Built on `Futures`, so it carries the order-book values, the expiry and underlying members and the basis.
+#'
+#' The class generator carries two discovery functions, which read the example futures segment:
+#'
+#' * `ExampleFutures$expiries(exchange, underlying_symbol, include_expired = FALSE, unified_broker_interface = NULL)` lists the expiries as a `Date` vector, soonest first.
+#' * `ExampleFutures$contracts(exchange, underlying_symbol = NULL, include_expired = FALSE, unified_broker_interface = NULL)` lists the contracts as a `data.frame` of identities, or `NULL` when nothing matches.
+#'
+#' @examples
+#' \dontrun{
+#' expiries <- ExampleFutures$expiries(exchange = "nse", underlying_symbol = "EXAMPLE")
+#' future <- ExampleFutures$new(
+#'   exchange = "nse",
+#'   underlying_symbol = "EXAMPLE",
+#'   expiry_date = expiries[[1]]
+#' )
+#' }
+#' @export
+ExampleFutures <- R6::R6Class(
+  "ExampleFutures",
+  inherit = Futures,
+  public = list(
+    #' @description
+    #' Looks the contract up in UBI's example futures segment and keeps its details.
+    #' @param exchange The character exchange the contract trades on, such as `"nse"`.
+    #' @param underlying_symbol The character symbol of the underlying.
+    #' @param expiry_date The day the contract expires, as a `Date` or a `"YYYY-MM-DD"` character value.
+    #' @param underlying The `Instrument` the contract is written on, which the contract keeps and uses, or `NULL` to use UBI's link to the underlying or else the family's default, looked up on every read.
+    #' @param unified_broker_interface The `UnifiedBrokerInterface` to send requests through, or `NULL` to share one client among all instruments.
+    #' @return A new `ExampleFutures` object.
+    #' @details Errors: signals `TypeError` when `underlying` is given and is not an `Instrument`; `ExampleFuturesError` when UBI has no such contract, or the instrument it returned is not in the example futures segment; and a `UnifiedBrokerInterfaceError` subclass for any other failure reported by, or on the way to, UBI.
+    initialize = function(
+      exchange,
+      underlying_symbol,
+      expiry_date,
+      underlying = NULL,
+      unified_broker_interface = NULL
+    ) {
+      tryCatch(
+        super$initialize(
+          exchange = exchange,
+          segment = EXAMPLES_EXAMPLE_FUTURES_SEGMENT,
+          underlying_symbol = underlying_symbol,
+          expiry_date = expiry_date,
+          underlying = underlying,
+          unified_broker_interface = unified_broker_interface
+        ),
+        InstrumentError = function(error) {
+          ErrorCatalogue$raise(
+            "ExampleFuturesError",
+            sprintf(
+              "UBI has no %s example futures contract on %s expiring %s",
+              exchange,
+              underlying_symbol,
+              format(expiry_date)
+            ),
+            parent = error
+          )
+        }
+      )
+      expected_segment <- paste0(
+        self$exchange,
+        "_",
+        EXAMPLES_EXAMPLE_FUTURES_SEGMENT
+      )
+      if (self$segment != expected_segment) {
+        ErrorCatalogue$raise(
+          "ExampleFuturesError",
+          sprintf(
+            "An instrument outside the %s segment is not an ExampleFutures: %s",
+            EXAMPLES_EXAMPLE_FUTURES_SEGMENT,
+            self$format()
+          )
+        )
+      }
+    }
+  )
+)
+
+ExampleFutures$expiries <- function(
+  exchange,
+  underlying_symbol,
+  include_expired = FALSE,
+  unified_broker_interface = NULL
+) {
+  catalogue <- InstrumentCatalogue$new(unified_broker_interface)
+  catalogue$expiry_dates(
+    exchange,
+    EXAMPLES_EXAMPLE_FUTURES_SEGMENT,
+    underlying_symbol,
+    include_expired
+  )
+}
+
+ExampleFutures$contracts <- function(
+  exchange,
+  underlying_symbol = NULL,
+  include_expired = FALSE,
+  unified_broker_interface = NULL
+) {
+  catalogue <- InstrumentCatalogue$new(unified_broker_interface)
+  catalogue$contracts_for(
+    exchange,
+    EXAMPLES_EXAMPLE_FUTURES_SEGMENT,
+    underlying_symbol,
+    NULL,
+    include_expired
+  )
+}
+```
+
+The class inherits every contract member from `Futures`, so the constructor is all it writes as a method, and the two discovery functions after it are the only other code. The matching error class is one entry in `ASSETS_ERROR_PARENTS` in `R/assets_exceptions.R`, placed beside the others, with an `\item` in that file's `@format` list worded the same way as its neighbours:
+
+```{r}
+#'   \item{`ExampleFuturesError`}{An example futures contract UBI does not know, or one that is not in the example futures segment.}
+
+ASSETS_ERROR_PARENTS <- c(
+  InstrumentError = "error",
+  ExampleFuturesError = "InstrumentError"
+)
+```
+
+The second block shows only the new entry and the root it hangs from; in the real file the new entry joins the existing thirty-eight.
+
+## What is left to port
+
+Every asset class the old project had is now ported, in both the Python library and this package. The one UBI segment without a class is `uncategorised`, a catch-all that UBI does not accept orders for, so it has no family file.
+
+::: {.alert .alert-warning}
+**Test with care.**
+
+A file with holdings members can place real orders through `add_to_holdings()`, `reduce_holdings()` and `liquidate_holdings()`, and those members have no `dry_run` argument. Check them against `FakeClient` in the tests rather than against the real UBI, unless you intend to trade.
+:::

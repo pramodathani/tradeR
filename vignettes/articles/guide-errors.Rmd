@@ -1,0 +1,551 @@
+---
+title: "Errors"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+The package signals three separate families of error condition, and it helps to know which is which before catching anything. Errors about the request to UBI, such as a refused token, a rejected order or a UBI that cannot be reached, are listed in `R/unified_broker_interface_exceptions.R` and are chosen by the HTTP status code UBI answered with. Errors about an instrument itself, such as an unknown symbol, an index used as something tradeable, a share used as a futures contract, or a position that cannot be changed as asked, are listed in `R/assets_exceptions.R`. Errors about an [asset basket](guide-asset-baskets.html), such as a basket that is not stored or a CSV file without a `symbol` column, are listed in `R/asset_baskets_exceptions.R`.
+
+The three families do not share a parent class, so a `UnifiedBrokerInterfaceError` handler never catches an `EquityError` or a `BasketNotFoundError`, and the other way round. Where one causes the other, the instrument error carries the UBI error in its `parent` field, the R counterpart of Python's `raise ... from`, so the original failure stays reachable.
+
+The table below lists every class on this page.
+
+| Kind | Member | Description |
+|---|---|---|
+| condition class | [`UnifiedBrokerInterfaceError`](#unifiedbrokerinterfaceerror) | The parent of every failure reported by, or on the way to, UBI |
+| condition class | [Twelve status classes](#the-ubi-client-errors) | One per HTTP status UBI returns, plus a catch-all and one for no answer at all |
+| condition class | [`InstrumentError`](#instrumenterror) | The parent of every problem with an instrument |
+| condition class | [Four behaviour errors](#the-instrument-errors) | Tradeable, non-tradeable, position and holding |
+| condition class | [Six derivative errors](#the-derivative-errors) | A contract of the wrong kind given to a derivative base class, or one whose underlying cannot be found |
+| condition class | [Twenty-seven family errors](#the-family-errors) | One per named instrument class, signalled when UBI has no such instrument |
+| condition class | [`AssetBasketError`](#assetbasketerror) and [three basket errors](#the-asset-basket-errors) | A basket that is not stored, has unusable members, or cannot be imported from a CSV file |
+
+## How the conditions are built
+
+R has no exception classes, but every R condition carries a class vector, and `tryCatch()` runs the first handler whose name matches any element of that vector. The package uses this to make its conditions behave like the Python library's exceptions. Each error is built by [ErrorCatalogue](../reference/ErrorCatalogue.html) in `R/utilities_error_catalogue.R`, which reads the parent of every class from four tables, listed below.
+
+| Table | File | What it holds |
+|---|---|---|
+| [`UNIFIED_BROKER_INTERFACE_ERROR_PARENTS`](../reference/UNIFIED_BROKER_INTERFACE_ERROR_PARENTS.html) | `R/unified_broker_interface_exceptions.R` | `UnifiedBrokerInterfaceError` and its twelve status classes |
+| [`ASSETS_ERROR_PARENTS`](../reference/ASSETS_ERROR_PARENTS.html) | `R/assets_exceptions.R` | `InstrumentError` and its thirty-seven subclasses |
+| [`ASSET_BASKETS_ERROR_PARENTS`](../reference/ASSET_BASKETS_ERROR_PARENTS.html) | `R/asset_baskets_exceptions.R` | `AssetBasketError` and its three subclasses |
+| [`UTILITIES_LANGUAGE_ERROR_PARENTS`](../reference/UTILITIES_LANGUAGE_ERROR_PARENTS.html) | `R/utilities_error_catalogue.R` | `ValueError`, `TypeError`, `KeyError` and `NotImplementedError`, the counterparts of Python's own exceptions |
+
+Each table maps a class name to its parent's name, and a root class maps to `error`. A condition's class vector is the Python class name, then every parent in turn, then `error` and `condition`. The table below shows three examples.
+
+| Condition | Its class vector |
+|---|---|
+| `EquityError` | `c("EquityError", "InstrumentError", "error", "condition")` |
+| `NotFoundError` | `c("NotFoundError", "UnifiedBrokerInterfaceError", "error", "condition")` |
+| `ValueError` | `c("ValueError", "error", "condition")` |
+
+So a handler named after the class itself, any of its parents, or plain `error` catches it, as the example below shows. Each condition also carries the fields `message`, `status_code`, `detail` and `parent`, and `ErrorCatalogue$name_of(error)` returns the first element of the class vector, which is the most specific class name.
+
+```{r}
+outcome <- tryCatch(
+  Equity$new(exchange = "nse", symbol = "NOSUCHSHARE"),
+  EquityError = function(error) {
+    cat("Most specific class:", ErrorCatalogue$name_of(error), "\n")
+    print(class(error))
+    cat("Message:", conditionMessage(error), "\n")
+    NULL
+  }
+)
+
+outcome <- tryCatch(
+  Equity$new(exchange = "nse", symbol = "NOSUCHSHARE"),
+  InstrumentError = function(error) NULL
+)
+```
+
+The handlers in a `tryCatch()` call are tried in the order they are written, so put the more specific class first when you handle a class and its parent differently. The example below does that for an order.
+
+```{r}
+reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+answer <- tryCatch(
+  reliance$buy_at_market_price(quantity = 1, product = "cnc"),
+  OrderRejectedError = function(error) {
+    cat("The broker refused:", error$detail[["status_message"]], "\n")
+    NULL
+  },
+  UnifiedBrokerInterfaceError = function(error) {
+    cat("UBI failed:", conditionMessage(error), "\n")
+    NULL
+  }
+)
+```
+
+The package signals these conditions itself with `ErrorCatalogue$raise(class_name, message)`, the R counterpart of Python's `raise SomeError(message)`.
+
+## The three hierarchies
+
+The class diagram below shows the UBI client errors. Every one of them is a direct subclass of `UnifiedBrokerInterfaceError`, whose parent is R's `error` class.
+
+<pre class="mermaid">
+classDiagram
+    direction LR
+    error &lt;|-- UnifiedBrokerInterfaceError
+    UnifiedBrokerInterfaceError &lt;|-- BadRequestError
+    UnifiedBrokerInterfaceError &lt;|-- AuthenticationError
+    UnifiedBrokerInterfaceError &lt;|-- LossLockoutError
+    UnifiedBrokerInterfaceError &lt;|-- NotFoundError
+    UnifiedBrokerInterfaceError &lt;|-- ConflictError
+    UnifiedBrokerInterfaceError &lt;|-- OrderRejectedError
+    UnifiedBrokerInterfaceError &lt;|-- RateLimitError
+    UnifiedBrokerInterfaceError &lt;|-- BrokerError
+    UnifiedBrokerInterfaceError &lt;|-- ServiceUnavailableError
+    UnifiedBrokerInterfaceError &lt;|-- OrderOutcomeUnknownError
+    UnifiedBrokerInterfaceError &lt;|-- ServerError
+    UnifiedBrokerInterfaceError &lt;|-- UnreachableError
+    class UnifiedBrokerInterfaceError {
+        +character message
+        +integer status_code
+        +list detail
+        +condition parent
+    }
+</pre>
+
+The class diagram below shows the instrument errors. They are all direct subclasses of `InstrumentError`, whose parent is also `error`; the twenty-seven family errors and the six derivative errors are grouped here to keep the diagram readable, and each is listed by name further down.
+
+<pre class="mermaid">
+classDiagram
+    direction LR
+    error &lt;|-- InstrumentError
+    InstrumentError &lt;|-- TradeableInstrumentError
+    InstrumentError &lt;|-- NonTradeableInstrumentError
+    InstrumentError &lt;|-- PositionError
+    InstrumentError &lt;|-- HoldingError
+    InstrumentError &lt;|-- DerivativeErrors
+    InstrumentError &lt;|-- EquityFamilyErrors
+    InstrumentError &lt;|-- FixedIncomeFamilyErrors
+    InstrumentError &lt;|-- CommodityFamilyErrors
+    InstrumentError &lt;|-- CurrencyFamilyErrors
+    InstrumentError &lt;|-- FundErrors
+    class EquityFamilyErrors {
+        EquityError
+        EquityFuturesError
+        EquityOptionError
+        EquityIndexError
+        EquityIndexFuturesError
+        EquityIndexOptionError
+    }
+    class FixedIncomeFamilyErrors {
+        FixedIncomeError
+        FixedIncomeFuturesError
+        FixedIncomeOptionError
+        FixedIncomeIndexError
+        FixedIncomeIndexFuturesError
+        FixedIncomeIndexOptionError
+    }
+    class CommodityFamilyErrors {
+        CommodityError
+        CommodityFuturesError
+        CommodityOptionError
+        CommodityIndexError
+        CommodityIndexFuturesError
+        CommodityIndexOptionError
+    }
+    class CurrencyFamilyErrors {
+        CurrencyError
+        CurrencyFuturesError
+        CurrencyOptionError
+        CurrencyIndexError
+        CurrencyIndexFuturesError
+        CurrencyIndexOptionError
+    }
+    class DerivativeErrors {
+        DerivativeError
+        FuturesError
+        OptionError
+        IndexFuturesError
+        IndexOptionError
+        UnderlyingError
+    }
+    class FundErrors {
+        ExchangeTradedFundError
+        InvestmentTrustError
+        MutualFundError
+    }
+</pre>
+
+The six grouping boxes in that diagram are not classes; each family error and each derivative error has `InstrumentError` as its direct parent. The third hierarchy, the asset basket errors, is drawn in [its own section](#the-asset-basket-errors).
+
+## Which status becomes which error
+
+UBI reports a failure as an HTTP status and a JSON body, with no error-type field, so the client chooses the class from the status code alone. The table below is that mapping, which lives in [`UNIFIED_BROKER_INTERFACE_ERROR_FOR_STATUS_CODE`](../reference/UNIFIED_BROKER_INTERFACE_ERROR_FOR_STATUS_CODE.html).
+
+| Status | Condition | What UBI means by it |
+|---|---|---|
+| 400 | [`BadRequestError`](#badrequesterror) | A parameter is missing or invalid, and the message names it |
+| 401 | [`AuthenticationError`](#authenticationerror) | The key or secret is wrong, or the token is missing, invalid or expired |
+| 403 | [`LossLockoutError`](#losslockouterror) | The day's loss is past UBI's daily loss limit |
+| 404 | [`NotFoundError`](#notfounderror) | The instrument, profile or order does not exist |
+| 409 | [`ConflictError`](#conflicterror) | The request conflicts with the account's state |
+| 422 | [`OrderRejectedError`](#orderrejectederror) | The broker refused the order |
+| 429 | [`RateLimitError`](#ratelimiterror) | The broker is at its order rate limit or daily order cap |
+| 502 | [`BrokerError`](#brokererror) | No broker's data could be read |
+| 503 | [`ServiceUnavailableError`](#serviceunavailableerror) | Data is stale or not kept, no broker can take the order, a price reference cannot be resolved, the order engine is not running, or a broker's order rate budget is full |
+| 504 | [`OrderOutcomeUnknownError`](#orderoutcomeunknownerror) | The order was sent but its outcome is unknown |
+| 500, 405 and any other | [`ServerError`](#servererror) | A failure with no more specific class |
+| none | [`UnreachableError`](#unreachableerror) | No answer arrived at all |
+
+A 2xx is never signalled as an error. That includes UBI's 202 for a held limit order or a synthetic order that is armed or scheduled; its 207 for a type that sends several orders when only some were accepted, whose `outcome` is `partial`; its 207 for a parent whose cancel left one leg possibly live, whose `state` is `cancelling`; and its 207 for a flatten that partly failed, which `Account$flatten()` returns for you to read.
+
+The condition's message is the body's `error` field, or its `status_message` when there is no `error`, or else `UBI returned HTTP <status>`. For a 422 and a 504 UBI answers with the order document rather than an error body, so the order is in `detail`. [Errors and status codes](https://pramodathani.github.io/unified_broker_interface/rest-api/errors/) on the UBI site lists every message UBI can send.
+
+## What to do next
+
+The flowchart below is a quick way to decide what to do when a call fails. The class sections after it give the detail.
+
+<pre class="mermaid">
+flowchart LR
+    A["A call signalled an error"] --&gt; B{"Which family?"}
+    B -- "InstrumentError" --&gt; C{"Which one?"}
+    C -- "a family error" --&gt; C1["Check the symbol, expiry, strike&lt;br/&gt;with search, expiries or chain"]
+    C -- "PositionError" --&gt; C2["Name the product, or check&lt;br/&gt;net_positions"]
+    C -- "HoldingError" --&gt; C3["Check holdings and the&lt;br/&gt;pledged quantity"]
+    C -- "Tradeable or NonTradeable" --&gt; C4["Use the other class"]
+    C -- "a derivative error" --&gt; C5["Use the base class&lt;br/&gt;for that kind of contract"]
+    C -- "UnderlyingError" --&gt; C6["Give the underlying&lt;br/&gt;when building the contract"]
+    B -- "UnifiedBrokerInterfaceError" --&gt; D{"Which one?"}
+    D -- "BadRequestError" --&gt; D1["Fix the call, the&lt;br/&gt;message names the field"]
+    D -- "OrderOutcomeUnknownError" --&gt; D2["Read orders before&lt;br/&gt;sending anything again"]
+    D -- "LossLockoutError or RateLimitError" --&gt; D3["Stop placing new&lt;br/&gt;orders today"]
+    D -- "OrderRejectedError" --&gt; D4["Read status_message&lt;br/&gt;in detail"]
+    D -- "ConflictError" --&gt; D5["Read orders or positions,&lt;br/&gt;the state has moved on"]
+    D -- "ServiceUnavailableError or BrokerError" --&gt; D6["Start the UBI service&lt;br/&gt;the message names"]
+    D -- "UnreachableError" --&gt; D7["Start UBI, check&lt;br/&gt;TRADINGMACHINE_UBI_BASE_URL"]
+    D -- "AuthenticationError" --&gt; D9["Make the MongoDB settings&lt;br/&gt;match UBI's key and secret"]
+    B -- "AssetBasketError" --&gt; E{"Which one?"}
+    E -- "BasketNotFoundError" --&gt; E1["Check the name and date&lt;br/&gt;with BasketStore names or history"]
+    E -- "BasketMemberError" --&gt; E2["Fix the member rows,&lt;br/&gt;the message names them"]
+    E -- "BasketCsvImportError" --&gt; E3["Fix the CSV file's&lt;br/&gt;columns or rows"]
+</pre>
+
+::: {.alert .alert-danger}
+**Never resend an order after `OrderOutcomeUnknownError`.**
+
+The order may well have reached the broker. Read [`orders`](guide-orders.html), or read the engine's answer with [`Account$intent()`](guide-account.html#intent) and the `intent_id` in the condition's `detail`, before sending anything again, or you may end up holding twice what you meant to.
+:::
+
+## The UBI client errors
+
+These classes are listed in `R/unified_broker_interface_exceptions.R`. Catch the parent class to handle every failure the same way, or one subclass to handle one case.
+
+### UnifiedBrokerInterfaceError
+
+`UnifiedBrokerInterfaceError` is the parent of every failure reported by, or on the way to, UBI. It carries the fields listed in the table below, so a handler can always read `error$detail[["name"]]` without first checking for `NULL`.
+
+| Field | Type | Description |
+|---|---|---|
+| `message` | character | What went wrong, from the body's `error` or `status_message`, or a generic text naming the status; `conditionMessage(error)` returns it |
+| `status_code` | integer or `NULL` | The HTTP status, or `NULL` when no answer arrived |
+| `detail` | named list | The parsed JSON body, or an empty list when there was none |
+| `parent` | condition or `NULL` | The condition that caused this one, such as the `httr2` failure behind an `UnreachableError`, or `NULL` |
+
+The example below catches one subclass and reads its fields. It is built from the code, and its output was not captured.
+
+```{r}
+tryCatch(
+  reliance$place_order(
+    transaction_type = "buy",
+    order_type = "limit",
+    quantity = 1,
+    product = "cnc"
+  ),
+  BadRequestError = function(error) {
+    cat(error$status_code, conditionMessage(error), "\n")
+    str(error$detail)
+  }
+)
+```
+
+### BadRequestError
+
+`BadRequestError` means HTTP 400: UBI could not use a parameter, such as a missing identity field, an unknown exchange, an invalid interval, or price fields that do not fit the order type. The message names the field. Fix the call rather than retrying it. A 400 is never turned into an instrument error, because it is a malformed call rather than a missing instrument.
+
+### AuthenticationError
+
+`AuthenticationError` means HTTP 401. The client already reconnected and retried once with a fresh token before signalling it, so seeing it means the key or secret is wrong: the `settings` document in this project's MongoDB does not match UBI's own. [Configuration](get-started-configuration.html#the-mongodb-settings-document) shows the document.
+
+### LossLockoutError
+
+`LossLockoutError` means HTTP 403, which UBI's order engine answers only when the day's loss is past its daily loss limit. Every new order is refused until the next trading day, so do not retry. The body carries the order's `intent_id`.
+
+### NotFoundError
+
+`NotFoundError` means HTTP 404: the instrument, profile or order does not exist, or no broker has a mapping for the instrument an order names. An instrument constructor never lets it escape, because it turns a 404 on lookup into [`InstrumentError`](#instrumenterror) or the class's own family error.
+
+### ConflictError
+
+`ConflictError` means HTTP 409: the request conflicts with the account's state. The common causes are listed below.
+
+- Modifying or cancelling an order that is no longer open, or cancelling a parent that has already finished.
+- A `reduce_position()` or `liquidate_position()` naming a product that is not held.
+- A reduce-only order, one sent with `reduce_only = TRUE`, whose leg would not reduce the net position when it was about to be sent. Nothing was sent.
+- An order the engine read too late to place, or one whose intent had already started a parent before an engine restart, in which case the `detail` carries the `parent_id` to read.
+- Changing a leg of a synthetic order in a field other than its price, trigger price or quantity, or changing a held order that has already been sent.
+
+Read [`orders`](guide-orders.html) or [`net_positions`](guide-positions.html) to see what changed.
+
+### OrderRejectedError
+
+`OrderRejectedError` means HTTP 422: the broker answered and refused the order. UBI sends the order document instead of an error body, so the broker's reason is in `error$detail[["status_message"]]`.
+
+### RateLimitError
+
+`RateLimitError` means HTTP 429: the broker UBI chose is at its order rate limit, or has used its daily order cap. The position-closing methods mark their orders as exits, so they can use the part of the cap UBI keeps for closing positions.
+
+### BrokerError
+
+`BrokerError` means HTTP 502: no broker's data could be read for the request, such as positions or the order book. It usually means UBI's background scripts for the brokers are not running.
+
+### ServiceUnavailableError
+
+`ServiceUnavailableError` means HTTP 503. It covers several causes, listed below, and the message says which.
+
+- UBI has no recent quote and no broker that serves quotes carries the instrument, which is always true of a cash bond, a fixed income index and a mutual fund.
+- A document UBI keeps, such as positions, is missing or too old to serve.
+- No broker can take the order, or the broker's order rate budget is full. The rate budget also covers `modify_order()` and `cancel_order()`, which then send nothing; this cause is worth retrying a moment later.
+- A price reference cannot be resolved: there is no live quote, the book is too shallow for the level asked for, or the brokers do not agree on a tick size.
+- The order engine is not running, so nothing was queued. UBI places every order through it, and it also runs `cancel_parent()` and the changes to an order the engine placed.
+- For commodities, UBI does not trust the contract's size that day, which the body reports as `contract_size_status`.
+
+### OrderOutcomeUnknownError
+
+`OrderOutcomeUnknownError` means HTTP 504: the order was sent, or handed to the engine, and whether it took effect is unknown. The order may exist. Read the order book before doing anything else. When UBI's order engine did not answer in time, the message is taken from `status_message`, such as "the order engine did not answer within 5.0 seconds, so this order may still be placed".
+
+### ServerError
+
+`ServerError` is the catch-all for any failure status without a class of its own, such as HTTP 500 when UBI's own settings document is missing, or HTTP 405 from a [`patch()`](guide-client.html#patch), because UBI has no PATCH route.
+
+### UnreachableError
+
+`UnreachableError` means no answer arrived at all: the connection was refused, the address was wrong, or the request timed out. Its `status_code` is `NULL`, and the original `httr2` failure is kept in its `parent` field. Check that UBI is running and that `TRADINGMACHINE_UBI_BASE_URL` points at it.
+
+## The instrument errors
+
+These classes are listed in `R/assets_exceptions.R`. Catch `InstrumentError` to handle every one of them, including the six derivative errors and all twenty-seven family errors, thirty-seven subclasses in all.
+
+### InstrumentError
+
+`InstrumentError` is the parent of every problem with an instrument itself. [`Instrument`](guide-instruments.html#instrument), `TradeableInstrument` and `NonTradeableInstrument` signal it directly when UBI answers 404 to a lookup, with the [`NotFoundError`](#notfounderror) in its `parent` field. The named classes catch it and signal their own family error instead.
+
+### TradeableInstrumentError
+
+`TradeableInstrumentError` means an instrument was asked for as tradeable but is an index, whose segment ends in `_indices`. Only [`TradeableInstrument`](guide-instruments.html#tradeableinstrument) built with a lookup of your own can signal it, because every named class fixes a segment that agrees with its base class.
+
+### NonTradeableInstrumentError
+
+`NonTradeableInstrumentError` means an instrument was asked for as non-tradeable but is not an index, so it can be traded. Only [`NonTradeableInstrument`](guide-instruments.html#nontradeableinstrument) built with a lookup of your own can signal it.
+
+### PositionError
+
+`PositionError` means a position cannot be changed as asked. The table below lists when each position method signals it.
+
+| Method | When |
+|---|---|
+| [`add_to_position()`](guide-positions.html#add_to_position) | Several positions are held and no product was named, or the product named is not held, or `transaction_type` points the other way from the position, or nothing is held and no direction and product were given |
+| [`reduce_position()`](guide-positions.html#reduce_position), [`liquidate_position()`](guide-positions.html#liquidate_position) | No product was named and there is not exactly one position, or the product is not `cnc`, `mis` or `nrml` |
+
+For `reduce_position()` and `liquidate_position()`, a named product that is not held comes back from UBI as [`ConflictError`](#conflicterror) instead, because UBI reads the position itself.
+
+### HoldingError
+
+`HoldingError` means a holding cannot be changed as asked. The [holdings](guide-holdings.html) methods on `Equity`, `FixedIncome`, `ExchangeTradedFund`, `InvestmentTrust` and `MutualFund` signal it when the instrument is not held, when a sale is larger than the units free to sell, and when the whole holding is pledged as collateral.
+
+## The derivative errors
+
+These six are signalled by the derivative base classes in `R/assets_instruments.R`, documented on [Derivatives](guide-derivatives.html). A family class such as `EquityFutures` never signals the first five in practice, because it names its own segment and UBI resolves that segment to exactly one kind of contract; they fire when a base class is built directly, typically from an `instrument_id` of unknown kind. Like every other instrument error they are direct subclasses of `InstrumentError`, so a `DerivativeError` handler does not catch `FuturesError`.
+
+The table below lists what each one means.
+
+| Error | Signalled when |
+|---|---|
+| <a id="derivativeerror"></a>`DerivativeError` | Any derivative base class is given something that is neither a future nor an option, a contract with no expiry date, or one in a segment with no known underlying segment. It is checked first, so a share given to `Futures` signals this rather than `FuturesError`. |
+| <a id="futureserror"></a>`FuturesError` | `Futures` or `IndexFutures` is given an option, or `Futures$expiries()` or `Futures$contracts()` is called on the bare `Futures` generator rather than on a family class |
+| <a id="optionerror"></a>`OptionError` | `Option` or `IndexOption` is given a future or an option with no strike price or option type, or `Option$expiries()`, `Option$strikes()` or `Option$chain()` is called on the bare `Option` generator |
+| <a id="indexfutureserror"></a>`IndexFuturesError` | `IndexFutures` is given a futures contract whose segment is not an index futures segment, such as a share future |
+| <a id="indexoptionerror"></a>`IndexOptionError` | `IndexOption` is given an option whose segment is not an index options segment, such as a share option |
+| <a id="underlyingerror"></a>`UnderlyingError` | A contract's underlying cannot be found: none was given, UBI links it to none, and its family's default finds none. Every future outside equities signals it from `underlying`, `underlying_price` and the basis members unless given an underlying, and so do the bse `USDINR-CNV` and `USDINR-STD` options, which have no future to be priced off. [Derivatives](guide-derivatives.html#how-a-contract-finds-its-underlying) gives the order a contract tries. |
+
+In the Python library the discovery class methods are inherited, so calling them on `IndexFutures` or `IndexOption` raises `FuturesError` or `OptionError`. R6 class generators do not inherit the functions stored on them, so the `IndexFutures` and `IndexOption` generators carry no `expiries` at all, and calling one signals R's plain "attempt to apply non-function" error.
+
+## The family errors
+
+Each of the twenty-seven named classes has an error of its own, signalled by its constructor when UBI has no instrument matching the arguments, with the `InstrumentError` beneath it in its `parent` field. The constructor also signals it if UBI ever returned an instrument outside the class's segment, which cannot happen today but guards against a change in UBI. The fix is almost always to find the right identity with [`search`](guide-discovery.html#search), [`expiries`](guide-discovery.html#expiries) or [`chain`](guide-discovery.html#chain) first.
+
+Some classes resolve nothing today because their segment is empty in UBI, so every call to their constructor signals their error: `FixedIncomeIndexOption`, `CurrencyIndex`, `CurrencyIndexFutures` and `CurrencyIndexOption`. [Asset classes](asset-classes.html) explains why.
+
+### EquityError
+
+`EquityError` is signalled by [`Equity`](guide-instruments.html#named-by-exchange-and-symbol) when UBI has no share with that symbol on that exchange.
+
+### EquityFuturesError
+
+`EquityFuturesError` is signalled by `EquityFutures` when UBI has no share futures contract on that underlying with that expiry.
+
+### EquityOptionError
+
+`EquityOptionError` is signalled by `EquityOption` when UBI has no share option with that underlying, expiry, strike and option type.
+
+### EquityIndexError
+
+`EquityIndexError` is signalled by `EquityIndex` when UBI has no equity index with that symbol on that exchange.
+
+### EquityIndexFuturesError
+
+`EquityIndexFuturesError` is signalled by `EquityIndexFutures` when UBI has no index futures contract on that underlying with that expiry.
+
+### EquityIndexOptionError
+
+`EquityIndexOptionError` is signalled by `EquityIndexOption` when UBI has no index option with that underlying, expiry, strike and option type.
+
+### FixedIncomeError
+
+`FixedIncomeError` is signalled by `FixedIncome` when UBI has no bond with that symbol, which is usually an ISIN such as `IN000126C010`.
+
+### FixedIncomeFuturesError
+
+`FixedIncomeFuturesError` is signalled by `FixedIncomeFutures` when UBI has no bond futures contract on that underlying, such as `633GS2035`, with that expiry.
+
+### FixedIncomeOptionError
+
+`FixedIncomeOptionError` is signalled by `FixedIncomeOption` when UBI has no bond option with that underlying, expiry, strike and option type.
+
+### FixedIncomeIndexError
+
+`FixedIncomeIndexError` is signalled by `FixedIncomeIndex` when UBI has no fixed income index with that symbol.
+
+### FixedIncomeIndexFuturesError
+
+`FixedIncomeIndexFuturesError` is signalled by `FixedIncomeIndexFutures` when UBI has no fixed income index futures contract on that underlying with that expiry.
+
+### FixedIncomeIndexOptionError
+
+`FixedIncomeIndexOptionError` is signalled by `FixedIncomeIndexOption` every time today, because no broker fills the `fixed_income_index_options` segment.
+
+### CommodityError
+
+`CommodityError` is signalled by `Commodity` when UBI has no commodity with that symbol on that exchange.
+
+### CommodityFuturesError
+
+`CommodityFuturesError` is signalled by `CommodityFutures` when UBI has no commodity futures contract, such as MCX `GOLD`, with that expiry.
+
+### CommodityOptionError
+
+`CommodityOptionError` is signalled by `CommodityOption` when UBI has no commodity option with that underlying, expiry, strike and option type.
+
+### CommodityIndexError
+
+`CommodityIndexError` is signalled by `CommodityIndex` when UBI has no commodity index, such as `MCXBULLDEX`, with that symbol.
+
+### CommodityIndexFuturesError
+
+`CommodityIndexFuturesError` is signalled by `CommodityIndexFutures` when UBI has no commodity index futures contract on that underlying with that expiry.
+
+### CommodityIndexOptionError
+
+`CommodityIndexOptionError` is signalled by `CommodityIndexOption` when UBI has no commodity index option with that underlying, expiry, strike and option type.
+
+### CurrencyError
+
+`CurrencyError` is signalled by `Currency` when UBI has no currency pair with that symbol on that exchange.
+
+### CurrencyFuturesError
+
+`CurrencyFuturesError` is signalled by `CurrencyFutures` when UBI has no currency futures contract, such as `USDINR`, with that expiry.
+
+### CurrencyOptionError
+
+`CurrencyOptionError` is signalled by `CurrencyOption` when UBI has no currency option with that underlying, expiry, strike and option type.
+
+### CurrencyIndexError
+
+`CurrencyIndexError` is signalled by `CurrencyIndex` every time today, because the `currency_indices` segment holds no rows on any exchange.
+
+### CurrencyIndexFuturesError
+
+`CurrencyIndexFuturesError` is signalled by `CurrencyIndexFutures` every time today, because the `currency_index_futures` segment holds no rows on any exchange.
+
+### CurrencyIndexOptionError
+
+`CurrencyIndexOptionError` is signalled by `CurrencyIndexOption` every time today, because the `currency_index_options` segment holds no rows on any exchange.
+
+### ExchangeTradedFundError
+
+`ExchangeTradedFundError` is signalled by `ExchangeTradedFund` when UBI has no exchange traded fund, such as `NIFTYBEES`, with that symbol on that exchange.
+
+### InvestmentTrustError
+
+`InvestmentTrustError` is signalled by `InvestmentTrust` when UBI has no investment trust, such as `EMBASSY`, with that symbol on that exchange.
+
+### MutualFundError
+
+`MutualFundError` is signalled by `MutualFund` when UBI has no mutual fund scheme with that code, such as `ABSLFTTIDG`, on that exchange.
+
+## The asset basket errors
+
+These classes are listed in `R/asset_baskets_exceptions.R` and are signalled by the [asset basket](guide-asset-baskets.html) classes and by the [`constituents`](guide-instruments.html#constituents) active binding. Failures reported by UBI itself during a basket's requests still arrive as the [UBI client errors](#the-ubi-client-errors). The class diagram below shows the family.
+
+<pre class="mermaid">
+classDiagram
+    direction LR
+    error &lt;|-- AssetBasketError
+    AssetBasketError &lt;|-- BasketNotFoundError
+    AssetBasketError &lt;|-- BasketMemberError
+    AssetBasketError &lt;|-- BasketCsvImportError
+</pre>
+
+Each of the three specific errors has `AssetBasketError` as its parent, so an `AssetBasketError` handler catches all four.
+
+### AssetBasketError
+
+`AssetBasketError` is the parent of every failure in building, reading, storing or trading an asset basket. It is also signalled directly in two cases: [`BasketStore`](guide-asset-baskets.html#basketstore-and-basketcsvimporter) finds a stored basket whose kind it does not know, and `Index$level` is read on an index that has no `base_date`.
+
+### BasketNotFoundError
+
+`BasketNotFoundError` is signalled by `BasketStore$load()` when no stored basket has the name asked for, or none is in effect on the date asked for. The [`constituents`](guide-instruments.html#constituents) active binding does not signal it, because it returns `NULL` when nothing is stored for the instrument.
+
+### BasketMemberError
+
+`BasketMemberError` means a basket's members are unusable. The list below gives the common causes.
+
+- The members are empty, name the same instrument twice, or give a weight to only some members.
+- UBI could not find one or more of the instruments a row, a CSV file or a stored basket names, or a row gives neither an `instrument_id` nor an `exchange` and a `segment`.
+- UBI answered an error for a member when last prices or candles were asked for.
+- A `Portfolio` member has no quantity, a portfolio's weights are asked for while a member has no last price, or `Portfolio$from_holdings()` or `Portfolio$from_positions()` finds nothing held.
+- An `Index` with `weighting = "stated"` has a member without a weight, `Index$level` finds a member with no candle near the `base_date`, or `to_portfolio()` is given too little capital to buy one whole unit of any member.
+- `remove_member()` names an instrument that is not in the basket.
+
+### BasketCsvImportError
+
+`BasketCsvImportError` is signalled by `BasketCsvImporter$import_file()` when a CSV file cannot be turned into a basket: it has no `symbol` column, it has no rows, or only some of its rows give a number in a column such as `weight` or `quantity`.
+
+## Errors that are not the package's own
+
+A few failures come from R, from the language-error classes or from the configuration rather than from the three families. The table below lists them, with the R behaviour where it differs from the Python library's.
+
+| Condition | Signalled by | When |
+|---|---|---|
+| A plain R error naming the missing argument | Any named constructor | A required identity argument is missing; Python raises `TypeError` here |
+| `TypeError` | The derivative constructors | `underlying` is given and is not an `Instrument` |
+| A plain R error | `UnifiedBrokerInterface$new()` and so the first instrument | No base URL, or no UBI `settings` document or key or secret in MongoDB; Python raises `ValueError` here |
+| A plain R error | The discovery functions and the constructors | A date string that is not `YYYY-MM-DD`, with the message `Invalid isoformat string`; Python raises `ValueError` here |
+| `ValueError` | `implied_volatility()` and `greeks()` | `underlying_price` or `volatility` is given and is not above zero |
+| `ValueError` | The basket constructors and `BasketStore` | An `unmapped_weight` outside 0 to 1, an unknown `weighting` or a base value that is not positive for `Index`, or no MongoDB database name configured |
+| `KeyError` | `Watchlist$rank_by()` | The column asked for is not one the watchlist has |
+| `NotImplementedError` | The `document()` method of the `PlanPart` base class | The plan part base class is asked for a document only a subclass can give |
+| A plain R error from `mongolite` | `BasketStore`, `BasketCsvImporter` and `constituents` | MongoDB could not be reached; Python raises `pymongo.errors.PyMongoError` here |
+| A plain R error, or `NULL` | An index class | Calling an order-book or order method, which an index does not have, signals "attempt to apply non-function", and reading a member it does not have returns `NULL`; Python raises `AttributeError` here |
+
+`ValueError`, `TypeError`, `KeyError` and `NotImplementedError` are built by `ErrorCatalogue` like every other condition on this page, with `error` as their parent, so `tryCatch(..., ValueError = function(error) ...)` catches them by name. The plain R errors have the class vector `c("simpleError", "error", "condition")`, so only an `error` handler catches them, and an `error` handler also catches every condition on this page.
+
+::: {.alert .alert-info}
+**Under the hood.**
+
+The status mapping is `UNIFIED_BROKER_INTERFACE_ERROR_FOR_STATUS_CODE` in `R/unified_broker_interface_exceptions.R`, and the choice is made by the client's private `raise_for_failure()` method; a status missing from the table becomes `ServerError`. The class vectors are built by `ErrorCatalogue$class_vector()` in `R/utilities_error_catalogue.R`. The reasoning behind each class, including why the 403 class is named for the loss lockout rather than called `ForbiddenError`, is in the Python library's note `.claude/notes/src/tradingmachine/unified_broker_interface/exceptions.py.md`, and the reasoning behind the R conditions is in `.claude/notes/R/utilities_error_catalogue.R.md`.
+:::

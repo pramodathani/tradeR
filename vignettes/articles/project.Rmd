@@ -1,0 +1,25 @@
+---
+title: "Project"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+This section is for people working on the package itself rather than using it. It explains where everything lives in the repository, how to add a new asset class the way the existing six family files were built, and how to write and publish these documentation pages.
+
+The flowchart below shows the order in which the three pages are usually needed: first finding your way around, then adding code, then documenting it.
+
+<pre class="mermaid">
+flowchart LR
+    S["Repository structure&lt;br/&gt;where things live"] --&gt; A["Adding an asset class&lt;br/&gt;the checklist"]
+    A --&gt; W["Writing these docs&lt;br/&gt;pages, build, publish"]
+</pre>
+
+The list below names each page of this section and what it covers.
+
+- **[Repository structure](project-structure.html)** is an annotated tree of the repository, how many files and lines each group of files in `R/` holds, and which group uses which.
+- **[Adding an asset class](project-adding-an-asset-class.html)** is a numbered checklist for a new family file, from the segment constants and the error classes to the tests, the sidecar note and the site's reference section.
+- **[Writing these docs](project-writing-docs.html)** covers previewing and building the site, how it is published on GitHub Pages, how the reference is generated from roxygen2 comments, and the visual conventions every article uses.
+
+Everything in this section follows the project's standing rules for code: every class, method and active binding has complete roxygen2 documentation, names are spelled out in full, source files carry no explanatory comments, and the reasoning behind each file lives in a sidecar note under `.claude/notes/` instead. The Python library `tradingmachine` remains the specification, so a change in behaviour starts there and is ported here.

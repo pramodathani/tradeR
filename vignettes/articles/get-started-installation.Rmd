@@ -1,0 +1,181 @@
+---
+title: "Installation"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+This page installs the package and the services around it, in the order they depend on each other. The system libraries come first because several R packages fail to compile without them; the R packages the package imports come next; the package itself after that; then the MongoDB container; and last comes the UBI that every call goes to.
+
+The table below summarises the steps and what each one leaves behind.
+
+| Step | What you run | What you end up with |
+|---|---|---|
+| [1. The system libraries](#install-the-system-libraries) | `sudo apt install ...` | The C libraries and CMake that `httr2`, `mongolite` and `talib` compile against |
+| [2. The R packages](#install-the-r-packages) | `install.packages(...)` | The six packages tradeR imports, plus the development tools |
+| [3. The package](#install-the-package) | `devtools::install()` | `library(tradeR)` working from any R session |
+| [4. MongoDB](#start-the-containers) | `docker compose up -d` in the Python project | Redis, MongoDB and TimescaleDB on ports 2002 to 2004 |
+| [5. UBI](#make-sure-ubi-and-its-order-engine-are-running) | UBI's own services | UBI answering on `127.0.0.1:8080`, placing orders through its engine |
+
+The diagram below shows what is running on the machine once every step is done, and which of those pieces the package talks to.
+
+<pre class="mermaid">
+flowchart LR
+    subgraph rlib["The R library"]
+        LIB["tradeR&lt;br/&gt;installed package"]
+        TA["talib package"] --&gt; C["bundled TA-Lib C library"]
+        LIB --&gt; TA
+    end
+    subgraph compose["docker compose, in tradingmachine"]
+        R[("Redis&lt;br/&gt;port 2002")]
+        M[("MongoDB&lt;br/&gt;port 2003")]
+        T[("TimescaleDB&lt;br/&gt;port 2004")]
+    end
+    subgraph ubi["UBI, a separate project"]
+        API["REST API&lt;br/&gt;127.0.0.1:8080"] --&gt; ENG["order engine"]
+    end
+    LIB -- "UBI's key and secret,&lt;br/&gt;stored baskets" --&gt; M
+    LIB -- "every price and order" --&gt; API
+</pre>
+
+The `.env` file that steps 4 and 5 read is described on [Configuration](get-started-configuration.html). Write it before step 4 if you are setting up from nothing.
+
+## 1. Install the system libraries
+
+Several of the R packages tradeR needs are compiled from source on Linux, and they compile against C libraries that R cannot install itself. Without them the install fails with an error about a missing header such as `curl/curl.h` or `sasl/sasl.h` rather than about a missing package, which is confusing the first time.
+
+The `talib` package, which the analysis methods use, is the R binding of the TA-Lib C library. Unlike the Python wrapper, it bundles the C library and builds it with CMake, so there is no separate TA-Lib install, but CMake must be present.
+
+On Ubuntu the system libraries and CMake are installed with the command below, which is the one in the package's README.
+
+```bash
+sudo apt install -y libcurl4-openssl-dev libssl-dev libsasl2-dev libuv1-dev libgit2-dev libicu-dev libharfbuzz-dev libfribidi-dev libfreetype-dev libpng-dev libtiff-dev libjpeg-dev libfontconfig1-dev libxml2-dev cmake
+```
+
+## 2. Install the R packages
+
+The package imports six R packages, and the development tools are three more. The command below installs all of them from CRAN in one call, run from any R session.
+
+```{r}
+install.packages(
+  c(
+    "R6",
+    "httr2",
+    "jsonlite",
+    "mongolite",
+    "dotenv",
+    "talib",
+    "devtools",
+    "testthat",
+    "withr"
+  )
+)
+```
+
+The table below lists what that brings in. `DESCRIPTION` declares the first six under `Imports`, because the package's code calls them, and `testthat` and `withr` under `Suggests`, because only the tests use them; `devtools` is not declared at all, because only the developer's own commands use it.
+
+| Group | Packages | What they do here |
+|---|---|---|
+| The package itself, `Imports` | `R6`, `httr2`, `jsonlite`, `mongolite`, `dotenv`, `talib` | The classes, the HTTP client, JSON, MongoDB, the `.env` file and the TA-Lib indicators |
+| The tests, `Suggests` | `testthat`, `withr` | Running the test suite with fake clients and mocked responses |
+| The development tools | `devtools` | Installing from source, loading the package while working on it, and running the tests |
+
+The tidyverse is deliberately not needed, because the package is written in base R.
+
+## 3. Install the package
+
+The package is installed from a copy of its repository. The command below, run in R from the repository root, builds the package and installs it into your R library, so that `library(tradeR)` works from any R session afterwards.
+
+```{r}
+devtools::install()
+```
+
+A quick check that the package and its TA-Lib binding are both in place is shown below. Loading the package touches nothing outside the R process, because its configuration is read only when first used.
+
+```{r}
+packageVersion("tradeR")
+packageVersion("talib")
+```
+
+On the development machine on 2026-10-07 these printed `0.1.0` and `0.9.4`, under R 4.6.1.
+
+::: {.alert .alert-info}
+**Working on the package without reinstalling it.**
+
+When you change the source in `R/`, `devtools::load_all()` loads the package straight from the repository, so an edit takes effect without running `devtools::install()` again. The test suite, run with `devtools::test()`, drives every class through a fake client and mocked HTTP responses, so it never reaches UBI and never places an order.
+:::
+
+## 4. Start the containers
+
+The package needs a MongoDB, and it uses the same one as the Python library `tradingmachine`, because both read the same `.env` file. This repository has no Docker Compose file of its own: the containers are defined in the `docker-compose.yml` of the Python project, which runs three data stores, each in its own container, and reads their ports and passwords from that project's `.env` file. If the Python library is already set up on the machine, its containers are already the ones this package uses, and this step is done.
+
+The commands below start the containers and list them, run from the Python project's directory.
+
+```bash
+cd ~/Projects/tradingmachine
+docker compose up -d
+docker compose ps
+```
+
+The table below lists the three services. Only MongoDB is used by this package, for UBI's key and secret and for the stored [asset baskets](guide-asset-baskets.html); Redis and TimescaleDB are running for code that has not been written yet.
+
+| Service | Image | Host port | Container port | Volume | Used by the package |
+|---|---|---|---|---|---|
+| `redis` | `redis:trixie` | 2002 | 6379 | `tradingmachine_redis_volume` | No |
+| `mongodb` | `mongo:8.0.4` | 2003 | 27017 | `tradingmachine_mongodb_volume` | Yes |
+| `timescaledb` | `timescale/timescaledb:latest-pg18` | 2004 | 5432 | `tradingmachine_timescaledb_volume` | No |
+
+The output below is `docker compose ps` on the development machine on 2026-09-26, taken from the Python project's documentation. The three warnings about `PYTHONPATH` are harmless: a leftover line in that project's `.env` refers to a variable that is not set, and no container uses it.
+
+```text
+time="2026-09-26T09:55:16+05:30" level=warning msg="The \"PYTHONPATH\" variable is not set. Defaulting to a blank string."
+time="2026-09-26T09:55:16+05:30" level=warning msg="The \"PYTHONPATH\" variable is not set. Defaulting to a blank string."
+time="2026-09-26T09:55:16+05:30" level=warning msg="The \"PYTHONPATH\" variable is not set. Defaulting to a blank string."
+NAME                           IMAGE                               COMMAND                  SERVICE       CREATED       STATUS                 PORTS
+tradingmachine-mongodb-1       mongo:8.0.4                         "docker-entrypoint.s…"   mongodb       11 days ago   Up 8 hours (healthy)   0.0.0.0:2003->27017/tcp
+tradingmachine-redis-1         redis:trixie                        "docker-entrypoint.s…"   redis         11 days ago   Up 8 hours (healthy)   0.0.0.0:2002->6379/tcp
+tradingmachine-timescaledb-1   timescale/timescaledb:latest-pg18   "docker-entrypoint.s…"   timescaledb   11 days ago   Up 8 hours (healthy)   0.0.0.0:2004->5432/tcp
+```
+
+Ports 2002 to 2004 were chosen so the project can run beside UBI, whose own containers use ports 1002 to 1005 on the same machine. The ports are bound on `0.0.0.0`, so other machines on the local network can reach them too.
+
+::: {.alert .alert-danger}
+**`docker compose down -v` deletes the data.**
+
+`docker compose down` stops the containers and keeps their volumes. Adding `-v` also deletes the three `tradingmachine_*_volume` volumes and everything in them, including the MongoDB document holding UBI's key and secret and every stored asset basket, which both this package and the Python library read.
+:::
+
+The usernames, passwords and database names in `.env` are read only when a container starts with an empty volume. Changing them later does not change the existing database; change the credential inside the database, or delete the volume and start again.
+
+## 5. Make sure UBI and its order engine are running
+
+UBI is a separate project with its own installation, documented on [its own site](https://pramodathani.github.io/unified_broker_interface/get-started/). This package needs two things from it, listed below.
+
+1. **UBI's REST API answers on `http://127.0.0.1:8080`.** UBI binds to `127.0.0.1` by default, so it is reachable only from the same machine, unlike the databases.
+2. **UBI's order engine service is running.** UBI hands every order to a separate process, `unified-orders@order_engine.service`, and has done so for every order since it removed its direct placement mode on 2026-09-27. While the process is stopped, UBI refuses every order with HTTP 503, which the package signals as [`ServiceUnavailableError`](guide-errors.html#serviceunavailableerror).
+
+The output below shows the two checks on the development machine on 2026-09-26. UBI's greeting route needs no token, so `curl` can call it directly.
+
+```bash
+curl http://127.0.0.1:8080/api/
+systemctl --user is-active unified-rest-api.service unified-orders@order_engine.service
+```
+
+```text
+{"message":"Welcome to the Unified Broker Interface API"}
+active
+active
+```
+
+UBI's [Services](https://pramodathani.github.io/unified_broker_interface/operations/services/#the-order-engine-and-the-synthetic-order-book) page shows how to start the order engine, and its [Order engine](https://pramodathani.github.io/unified_broker_interface/rest-api/order-engine/) page explains what it does.
+
+::: {.alert .alert-danger}
+**The order engine places real orders.**
+
+Once the engine runs, a synthetic order can place real orders long after the call that created it has returned. Stopping UBI's REST API does not stop the engine.
+:::
+
+## What comes next
+
+With everything installed, [Configuration](get-started-configuration.html) writes the `.env` file and the MongoDB document the package reads, and [First steps](get-started-first-steps.html) makes the first calls.

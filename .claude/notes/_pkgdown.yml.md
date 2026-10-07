@@ -9,3 +9,5 @@ The descriptions are quoted because several contain a colon, which YAML otherwis
 pkgdown renders every Markdown file at the repository root as a page, apart from `README.md`, `LICENSE.md` and `NEWS.md`. That is why the project instructions for Claude Code live in `.claude/CLAUDE.md` rather than `CLAUDE.md`: at the root they would have been published as a page of the site.
 
 The built site goes to `docs/`, which `.gitignore` and `.Rbuildignore` both exclude, because the workflow publishes it to the `gh-pages` branch instead of committing it to `main`.
+
+The `articles` section lists the 40 guide articles in six groups that follow the MkDocs navigation: Get started, Using tradeR, Asset classes, Analysis, Architecture and Project. Each entry is written as `"articles/<name>"`, because the articles sit in `vignettes/articles/` and pkgdown parses an unquoted name such as `get-started` as R code. pkgdown adds a redirect from `articles/articles/<name>.html` for each, which is harmless. `template: includes: in_header` loads Mermaid so the articles' sequence diagrams draw; see `.claude/notes/vignettes/articles.md`.

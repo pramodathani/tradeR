@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="460" viewBox="0 0 820 460" role="img" aria-label="A five-level order book with the price levels each price wrapper uses">
+<style>
+.background { fill: #ffffff; }
+.bid { fill: #42a5f5; }
+.offer { fill: #ff7043; }
+.axis { stroke: #5f6368; stroke-width: 1; }
+.grid { stroke: #e0e0e0; stroke-width: 1; stroke-dasharray: 4 4; }
+text { font-family: "Roboto", "Helvetica Neue", Arial, sans-serif; fill: #202124; }
+.price { font-family: "Roboto Mono", monospace; font-size: 12px; }
+.label { font-size: 11px; }
+.title { font-size: 12px; fill: #6b7280; }
+</style>
+<rect class="background" x="0" y="0" width="820" height="460"/>
+<text class="title" x="20" y="28">Price in rupees</text>
+<line class="grid" x1="360.0" y1="50" x2="360.0" y2="370"/>
+<line class="grid" x1="540.0" y1="50" x2="540.0" y2="370"/>
+<text class="price" x="20" y="70.0">1000.25</text>
+<rect class="offer" x="450" y="55.0" width="90" height="22" rx="3"/>
+<text class="label" x="546" y="70.0">offer 5</text>
+<text class="price" x="20" y="102.0">1000.20</text>
+<rect class="offer" x="450" y="87.0" width="90" height="22" rx="3"/>
+<text class="label" x="546" y="102.0">offer 4</text>
+<text class="price" x="20" y="134.0">1000.15</text>
+<rect class="offer" x="450" y="119.0" width="90" height="22" rx="3"/>
+<text class="label" x="546" y="134.0">offer 3</text>
+<text class="price" x="20" y="166.0">1000.10</text>
+<rect class="offer" x="450" y="151.0" width="90" height="22" rx="3"/>
+<text class="label" x="546" y="166.0">offer 2, also the last price</text>
+<text class="price" x="20" y="198.0">1000.05</text>
+<rect class="offer" x="450" y="183.0" width="90" height="22" rx="3"/>
+<text class="label" x="546" y="198.0">offer 1, marketable buy, mid for a sell</text>
+<text class="price" x="20" y="230.0">1000.00</text>
+<rect class="bid" x="360" y="215.0" width="90" height="22" rx="3"/>
+<text class="label" x="354" y="230.0" text-anchor="end">bid 1, marketable sell, mid for a buy</text>
+<text class="price" x="20" y="262.0">999.95</text>
+<rect class="bid" x="360" y="247.0" width="90" height="22" rx="3"/>
+<text class="label" x="354" y="262.0" text-anchor="end">bid 2</text>
+<text class="price" x="20" y="294.0">999.90</text>
+<rect class="bid" x="360" y="279.0" width="90" height="22" rx="3"/>
+<text class="label" x="354" y="294.0" text-anchor="end">bid 3</text>
+<text class="price" x="20" y="326.0">999.85</text>
+<rect class="bid" x="360" y="311.0" width="90" height="22" rx="3"/>
+<text class="label" x="354" y="326.0" text-anchor="end">bid 4</text>
+<text class="price" x="20" y="358.0">999.80</text>
+<rect class="bid" x="360" y="343.0" width="90" height="22" rx="3"/>
+<text class="label" x="354" y="358.0" text-anchor="end">bid 5, also the day&#39;s average price</text>
+<line class="axis" x1="450" y1="44" x2="450" y2="376"/>
+<text class="label" x="360.0" y="392" text-anchor="middle">-100</text>
+<text class="label" x="450.0" y="392" text-anchor="middle">0</text>
+<text class="label" x="540.0" y="392" text-anchor="middle">100</text>
+<text class="title" x="450" y="412" text-anchor="middle">Units waiting (bids to the left, offers to the right)</text>
+<rect class="bid" x="280" y="426" width="14" height="12" rx="2"/>
+<text class="label" x="300" y="436">Bids (buy side)</text>
+<rect class="offer" x="480" y="426" width="14" height="12" rx="2"/>
+<text class="label" x="500" y="436">Offers (sell side)</text>
+</svg>

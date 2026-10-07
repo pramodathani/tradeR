@@ -1,0 +1,570 @@
+---
+title: "Instruments"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+An instrument is one thing you can look up at UBI, such as a share, an index, a futures contract or an option, held as an R6 object. You build it once by naming it, it looks itself up in UBI with one request, and from then on it carries its identity, its lot size and tick size, and every member described on the other pages of this guide.
+
+The table below lists what this page covers. The twenty-seven named classes are the ones you normally use; the eight base classes underneath them are documented at the end.
+
+| Kind | Member | Description |
+|---|---|---|
+| class | [Named by exchange and symbol](#named-by-exchange-and-symbol) | The eleven classes for shares, indices, bonds, currency pairs, commodities, funds, trusts and mutual funds |
+| class | [Named by underlying and expiry](#named-by-underlying-and-expiry) | The eight futures classes |
+| class | [Named by underlying, expiry, strike and option type](#named-by-underlying-expiry-strike-and-option-type) | The eight option classes |
+| field | [The fields set on lookup](#the-fields-set-on-lookup) | `instrument_id`, `exchange`, `segment`, `shape`, `symbol` and the rest, fixed at construction |
+| function on the class generator | [`shared_unified_broker_interface`](#shared_unified_broker_interface) | The one UBI client every instrument shares |
+| active binding | [`constituents`](#constituents) | The stored basket of what an index, an exchange traded fund or a mutual fund holds |
+| class | [`Instrument`](#instrument) | The base of every instrument, which quotes and analyses but cannot trade |
+| class | [`TradeableInstrument`](#tradeableinstrument) | An instrument that can be traded, which is anything except an index |
+| class | [`NonTradeableInstrument`](#nontradeableinstrument) | An index, which is followed rather than traded |
+| class | [`Derivative`, `Futures`, `Option`, `IndexFutures`, `IndexOption`](#the-derivative-base-classes) | The bases every futures and option class inherits, whose members are on [Derivatives](guide-derivatives.html) |
+
+The strings these constructors accept, such as `nse`, `CE` and the segment names, are listed on [Vocabulary](guide-vocabulary.html).
+
+## The twenty-seven classes
+
+Each class stands for one of UBI's segments, so the kind of contract is the class you pick rather than a segment string you type. The diagram below shows how the classes are built: every one of them inherits from `Instrument` through one of two middle classes, only the four index classes are non-tradeable, and the sixteen futures and option classes inherit a derivative base in between.
+
+<pre class="mermaid">
+flowchart TB
+    I["Instrument&lt;br/&gt;identity, candles, quotes,&lt;br/&gt;about 210 analysis methods"]
+    T["TradeableInstrument&lt;br/&gt;order book, orders,&lt;br/&gt;positions"]
+    N["NonTradeableInstrument&lt;br/&gt;indices only"]
+    I --&gt; T
+    I --&gt; N
+    T --&gt; C1["Equity, FixedIncome,&lt;br/&gt;Commodity, Currency"]
+    T --&gt; C2["ExchangeTradedFund,&lt;br/&gt;InvestmentTrust, MutualFund"]
+    T --&gt; D["Derivative&lt;br/&gt;expiry, underlying"]
+    D --&gt; FB["Futures&lt;br/&gt;basis"]
+    D --&gt; OB["Option&lt;br/&gt;moneyness, greeks"]
+    FB --&gt; IF["IndexFutures"]
+    OB --&gt; IO["IndexOption"]
+    FB --&gt; F["four futures classes"]
+    IF --&gt; F2["four index futures classes"]
+    OB --&gt; O["four option classes"]
+    IO --&gt; O2["four index option classes"]
+    N --&gt; X["EquityIndex, FixedIncomeIndex,&lt;br/&gt;CommodityIndex, CurrencyIndex"]
+</pre>
+
+R6 allows a class only one parent, so the analysis methods reach `Instrument` through a single chain of analysis classes, from `PriceAnalysis` at the root to `PerformanceMeasures` at the end, which `Instrument` inherits. The effect is the same as the Python library's fourteen mixins: every analysis method is available on every instrument.
+
+The table below lists every class with its source file, the segment it fixes, and the constructor arguments that name one of its instruments. The `unified_broker_interface` argument, which every class also takes, is left out of the last column.
+
+| Class | File | Segment | Base | Named by |
+|---|---|---|---|---|
+| [`Equity`](../reference/Equity.html) | `R/assets_equities.R` | `equities` | Tradeable | `exchange`, `symbol` |
+| [`EquityFutures`](../reference/EquityFutures.html) | `R/assets_equities.R` | `equity_futures` | `Futures` | `exchange`, `underlying_symbol`, `expiry_date` |
+| [`EquityOption`](../reference/EquityOption.html) | `R/assets_equities.R` | `equity_options` | `Option` | `exchange`, `underlying_symbol`, `expiry_date`, `strike_price`, `option_type` |
+| [`EquityIndex`](../reference/EquityIndex.html) | `R/assets_equities.R` | `equity_indices` | Non-tradeable | `exchange`, `symbol` |
+| [`EquityIndexFutures`](../reference/EquityIndexFutures.html) | `R/assets_equities.R` | `equity_index_futures` | `IndexFutures` | `exchange`, `underlying_symbol`, `expiry_date` |
+| [`EquityIndexOption`](../reference/EquityIndexOption.html) | `R/assets_equities.R` | `equity_index_options` | `IndexOption` | `exchange`, `underlying_symbol`, `expiry_date`, `strike_price`, `option_type` |
+| [`FixedIncome`](../reference/FixedIncome.html) | `R/assets_fixed_income.R` | `fixed_income` | Tradeable | `exchange`, `symbol` |
+| [`FixedIncomeFutures`](../reference/FixedIncomeFutures.html) | `R/assets_fixed_income.R` | `fixed_income_futures` | `Futures` | `exchange`, `underlying_symbol`, `expiry_date` |
+| [`FixedIncomeOption`](../reference/FixedIncomeOption.html) | `R/assets_fixed_income.R` | `fixed_income_options` | `Option` | `exchange`, `underlying_symbol`, `expiry_date`, `strike_price`, `option_type` |
+| [`FixedIncomeIndex`](../reference/FixedIncomeIndex.html) | `R/assets_fixed_income.R` | `fixed_income_indices` | Non-tradeable | `exchange`, `symbol` |
+| [`FixedIncomeIndexFutures`](../reference/FixedIncomeIndexFutures.html) | `R/assets_fixed_income.R` | `fixed_income_index_futures` | `IndexFutures` | `exchange`, `underlying_symbol`, `expiry_date` |
+| [`FixedIncomeIndexOption`](../reference/FixedIncomeIndexOption.html) | `R/assets_fixed_income.R` | `fixed_income_index_options` | `IndexOption` | `exchange`, `underlying_symbol`, `expiry_date`, `strike_price`, `option_type` |
+| [`Commodity`](../reference/Commodity.html) | `R/assets_commodities.R` | `commodities` | Tradeable | `exchange`, `symbol` |
+| [`CommodityFutures`](../reference/CommodityFutures.html) | `R/assets_commodities.R` | `commodity_futures` | `Futures` | `exchange`, `underlying_symbol`, `expiry_date` |
+| [`CommodityOption`](../reference/CommodityOption.html) | `R/assets_commodities.R` | `commodity_options` | `Option` | `exchange`, `underlying_symbol`, `expiry_date`, `strike_price`, `option_type` |
+| [`CommodityIndex`](../reference/CommodityIndex.html) | `R/assets_commodities.R` | `commodity_indices` | Non-tradeable | `exchange`, `symbol` |
+| [`CommodityIndexFutures`](../reference/CommodityIndexFutures.html) | `R/assets_commodities.R` | `commodity_index_futures` | `IndexFutures` | `exchange`, `underlying_symbol`, `expiry_date` |
+| [`CommodityIndexOption`](../reference/CommodityIndexOption.html) | `R/assets_commodities.R` | `commodity_index_options` | `IndexOption` | `exchange`, `underlying_symbol`, `expiry_date`, `strike_price`, `option_type` |
+| [`Currency`](../reference/Currency.html) | `R/assets_currencies.R` | `currencies` | Tradeable | `exchange`, `symbol` |
+| [`CurrencyFutures`](../reference/CurrencyFutures.html) | `R/assets_currencies.R` | `currency_futures` | `Futures` | `exchange`, `underlying_symbol`, `expiry_date` |
+| [`CurrencyOption`](../reference/CurrencyOption.html) | `R/assets_currencies.R` | `currency_options` | `Option` | `exchange`, `underlying_symbol`, `expiry_date`, `strike_price`, `option_type` |
+| [`CurrencyIndex`](../reference/CurrencyIndex.html) | `R/assets_currencies.R` | `currency_indices` | Non-tradeable | `exchange`, `symbol` |
+| [`CurrencyIndexFutures`](../reference/CurrencyIndexFutures.html) | `R/assets_currencies.R` | `currency_index_futures` | `IndexFutures` | `exchange`, `underlying_symbol`, `expiry_date` |
+| [`CurrencyIndexOption`](../reference/CurrencyIndexOption.html) | `R/assets_currencies.R` | `currency_index_options` | `IndexOption` | `exchange`, `underlying_symbol`, `expiry_date`, `strike_price`, `option_type` |
+| [`ExchangeTradedFund`](../reference/ExchangeTradedFund.html) | `R/assets_funds.R` | `exchange_traded_funds` | Tradeable | `exchange`, `symbol` |
+| [`InvestmentTrust`](../reference/InvestmentTrust.html) | `R/assets_funds.R` | `investment_trusts` | Tradeable | `exchange`, `symbol` |
+| [`MutualFund`](../reference/MutualFund.html) | `R/assets_mutual_funds.R` | `mutual_funds` | Tradeable | `exchange`, `symbol` |
+
+Every class is exported by the package, so after `library(tradeR)` you build an equity with `Equity$new(...)` and need no prefix. Some classes exist for symmetry and resolve nothing today, because UBI holds no rows in their segment; [Asset classes](asset-classes.html) says which, and what each family can and cannot do.
+
+::: {.alert .alert-info}
+**Tradeable does not always mean orderable.**
+
+`Commodity` is built on `TradeableInstrument`, but the rows in UBI's `commodities` segment are the exchange's underlying reference records rather than contracts, so UBI refuses an order for one and has no quote for it. The class carries the order members anyway, because the tradeable rule is only "not an index". [Commodities](asset-classes-commodities.html) has the details.
+:::
+
+### Named by exchange and symbol
+
+The constructor is called as `Equity$new(exchange, symbol, unified_broker_interface = NULL)`, and it sends `GET /api/instruments/details`.
+
+Eleven classes name their instrument by an exchange and a symbol: `Equity`, `EquityIndex`, `FixedIncome`, `FixedIncomeIndex`, `Commodity`, `CommodityIndex`, `Currency`, `CurrencyIndex`, `ExchangeTradedFund`, `InvestmentTrust` and `MutualFund`. Each constructor sends one request to UBI with its own segment filled in, keeps what comes back, and signals its own error class if UBI has no such instrument. The signature above is `Equity`'s, and the other ten are identical apart from the class name.
+
+#### Parameters
+
+The table below lists the constructor's arguments.
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `exchange` | character | Yes | | The exchange, such as `nse`, `bse` or `mcx` |
+| `symbol` | character | Yes | | The symbol, such as `RELIANCE`, `NIFTY`, the ISIN `IN000126C010` for a bond, or the scheme code `ABSLFTTIDG` for a mutual fund. UBI upper-cases it, so `reliance` works too. |
+| `unified_broker_interface` | `UnifiedBrokerInterface` or `NULL` | No | `NULL` | The client to send requests through. `NULL` uses the [shared client](#shared_unified_broker_interface), which is almost always what you want. |
+
+#### Example
+
+The example below builds RELIANCE and prints it. When the Python version of this call was captured from a local UBI on 2026-09-26 it printed `Equity(exchange='nse', segment='nse_equities', symbol='RELIANCE')`, and the R `format()` method writes the same text.
+
+```{r}
+library(tradeR)
+
+reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+print(reliance)
+```
+
+#### Returns
+
+The constructor returns the instrument object, with the [fields below](#the-fields-set-on-lookup) already set.
+
+#### Errors
+
+The table below lists the conditions the constructor can signal.
+
+| Condition | When |
+|---|---|
+| The class's own error, such as [`EquityError`](guide-errors.html#equityerror) | UBI has no instrument with that symbol on that exchange in this class's segment |
+| R's "argument is missing, with no default" error | An argument is missing, which R reports when the argument is first used, before any request is sent |
+| [`BadRequestError`](guide-errors.html#badrequesterror) | UBI does not know the exchange |
+| [`UnifiedBrokerInterfaceError`](guide-errors.html#unifiedbrokerinterfaceerror) | Any other failure reported by, or on the way to, UBI |
+
+### Named by underlying and expiry
+
+The constructor is called as `EquityFutures$new(exchange, underlying_symbol, expiry_date, underlying = NULL, unified_broker_interface = NULL)`, and it sends `GET /api/instruments/details`.
+
+The eight futures classes name a contract by its exchange, the symbol of what it is written on, and the day it expires: `EquityFutures`, `EquityIndexFutures`, `FixedIncomeFutures`, `FixedIncomeIndexFutures`, `CommodityFutures`, `CommodityIndexFutures`, `CurrencyFutures` and `CurrencyIndexFutures`. Pass the underlying's own object as `underlying` to give the contract its underlying reliably, because UBI links the two only by the symbol strings matching and not every underlying carries the contract's `underlying_symbol`.
+
+#### Parameters
+
+The table below lists the constructor's arguments.
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `exchange` | character | Yes | | The exchange, such as `nse` or `mcx` |
+| `underlying_symbol` | character | Yes | | The symbol of the underlying, such as `RELIANCE`, `NIFTY` or `GOLD` |
+| `expiry_date` | `Date` or character | Yes | | The expiry, as a `Date` or a `YYYY-MM-DD` string. [`expiries`](guide-discovery.html#expiries) lists the valid ones. |
+| `underlying` | `Instrument` or `NULL` | No | `NULL` | The instrument the contract is written on, such as an `Equity`, an `EquityIndex` or a future, which the contract keeps for [`underlying`](guide-derivatives.html#underlying) and [`underlying_price`](guide-derivatives.html#underlying_price). `NULL` uses UBI's link to the underlying, the `underlying_instrument_id` field, when UBI gives one, and otherwise the family's default, looked up again on every read; [How a contract finds its underlying](guide-derivatives.html#how-a-contract-finds-its-underlying) gives the order. |
+| `unified_broker_interface` | `UnifiedBrokerInterface` or `NULL` | No | `NULL` | The client to send requests through, or `NULL` for the shared one |
+
+#### Example
+
+The example below takes the expiry from `CommodityFutures$expiries()`, builds the nearest MCX gold future, and prints its lot size and tick size. When the Python version was captured from a local UBI on 2026-09-26, the first expiry was 2026-10-05, the contract printed as `CommodityFutures(exchange='mcx', segment='mcx_commodity_futures', underlying_symbol='GOLD', expiry_date='2026-10-05')`, its lot size was 100 and its tick size was 1 rupee.
+
+```{r}
+expiries <- CommodityFutures$expiries(
+  exchange = "mcx",
+  underlying_symbol = "GOLD"
+)
+gold <- CommodityFutures$new(
+  exchange = "mcx",
+  underlying_symbol = "GOLD",
+  expiry_date = expiries[[1]]
+)
+print(gold)
+cat(gold$lot_size, gold$tick_size, "\n")
+```
+
+#### Returns
+
+The constructor returns the contract object, with the [fields below](#the-fields-set-on-lookup) set and `symbol` left as `NULL`.
+
+#### Errors
+
+The table below lists the conditions the constructor can signal.
+
+| Condition | When |
+|---|---|
+| The class's own error, such as [`EquityFuturesError`](guide-errors.html#equityfutureserror) | UBI has no such contract, including a date that is not one of the underlying's expiries |
+| R's "argument is missing, with no default" error | An argument is missing |
+| `TypeError` | `underlying` is given and is not an `Instrument` |
+| [`UnifiedBrokerInterfaceError`](guide-errors.html#unifiedbrokerinterfaceerror) | Any other failure reported by, or on the way to, UBI |
+
+The constructor does not parse an expiry string itself. It sends the text to UBI as it was given, so an expiry that is not a valid date is reported by UBI through one of the conditions above.
+
+### Named by underlying, expiry, strike and option type
+
+The constructor is called as `EquityIndexOption$new(exchange, underlying_symbol, expiry_date, strike_price, option_type, underlying = NULL, unified_broker_interface = NULL)`, and it sends `GET /api/instruments/details`.
+
+The eight option classes add a strike price and an option type to the futures arguments: `EquityOption`, `EquityIndexOption`, `FixedIncomeOption`, `FixedIncomeIndexOption`, `CommodityOption`, `CommodityIndexOption`, `CurrencyOption` and `CurrencyIndexOption`. The usual way to get the four identity values right is to read them off a row of [`chain`](guide-discovery.html#chain) rather than typing them.
+
+#### Parameters
+
+The table below lists the constructor's arguments.
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `exchange` | character | Yes | | The exchange, such as `nse` |
+| `underlying_symbol` | character | Yes | | The symbol of the underlying, such as `NIFTY` |
+| `expiry_date` | `Date` or character | Yes | | The expiry, as a `Date` or a `YYYY-MM-DD` string |
+| `strike_price` | numeric | Yes | | The strike price in rupees, such as `25000` |
+| `option_type` | character | Yes | | `CE` for a call or `PE` for a put |
+| `underlying` | `Instrument` or `NULL` | No | `NULL` | The instrument the contract is written on, such as an `Equity`, an `EquityIndex` or a future, which the contract keeps for [`underlying`](guide-derivatives.html#underlying) and [`underlying_price`](guide-derivatives.html#underlying_price). `NULL` uses UBI's link to the underlying, the `underlying_instrument_id` field, when UBI gives one, and otherwise the family's default, looked up again on every read; [How a contract finds its underlying](guide-derivatives.html#how-a-contract-finds-its-underlying) gives the order. |
+| `unified_broker_interface` | `UnifiedBrokerInterface` or `NULL` | No | `NULL` | The client to send requests through, or `NULL` for the shared one |
+
+#### Example
+
+This example is the R form of the one in the Python `equities` module's own docstring. Its output was never captured.
+
+```{r}
+option <- EquityIndexOption$new(
+  exchange = "nse",
+  underlying_symbol = "NIFTY",
+  expiry_date = "2026-09-29",
+  strike_price = 25000,
+  option_type = "CE"
+)
+premium <- option$last_price
+```
+
+A check recorded in the Python project's notes on 2026-09-20 built the RELIANCE put at a strike of 1270 expiring on 2026-09-29, `EquityOption("nse", "RELIANCE", "2026-09-29", 1270.0, "PE")` in Python, from a row of the RELIANCE chain. UBI returned the same `instrument_id` the row carried, `12278f86-2feb-54b0-875f-4c1311d550fc`, with a lot size of 500 and a tick size of 0.05, which is the evidence that a row found by discovery always turns into the right contract. The R port sends the same request, so the same holds for `EquityOption$new()`.
+
+#### Returns
+
+The constructor returns the option object, with `strike_price` as a number and `option_type` as `CE` or `PE`.
+
+#### Errors
+
+The table below lists the conditions the constructor can signal.
+
+| Condition | When |
+|---|---|
+| The class's own error, such as [`EquityIndexOptionError`](guide-errors.html#equityindexoptionerror) | UBI has no such option |
+| R's "argument is missing, with no default" error | An argument is missing |
+| `TypeError` | `underlying` is given and is not an `Instrument` |
+| [`UnifiedBrokerInterfaceError`](guide-errors.html#unifiedbrokerinterfaceerror) | Any other failure reported by, or on the way to, UBI |
+
+As with the futures classes, an expiry string is sent to UBI as it was given rather than parsed first.
+
+## How an instrument is looked up
+
+Every constructor, whatever its class, ends in the same single request to UBI's details route, unless the three base classes are handed UBI's answer already through `details`. The sequence below shows that request for `Equity$new("nse", "RELIANCE")`, including the two checks that run after the answer arrives.
+
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant You as Your code
+    participant Equity as Equity constructor
+    participant Client as UBI client
+    participant UBI as UBI
+    You-&gt;&gt;Equity: Equity$new("nse", "RELIANCE")
+    Equity-&gt;&gt;Client: get /api/instruments/details&lt;br/&gt;exchange=nse, segment=equities, symbol=RELIANCE
+    Client-&gt;&gt;UBI: GET with the access-token header
+    UBI--&gt;&gt;Client: 200 with the identity, lot size, tick size, carried_by
+    Client--&gt;&gt;Equity: the parsed named list
+    Equity-&gt;&gt;Equity: keep the values as fields
+    Equity-&gt;&gt;Equity: check it is not an index
+    Equity-&gt;&gt;Equity: check the segment is nse_equities
+    Equity--&gt;&gt;You: the Equity object
+</pre>
+
+A 404 from UBI is turned into `InstrumentError` inside `Instrument`, and each named class catches that with `tryCatch()` and signals its own error, such as `EquityError`, keeping the original condition as its `parent` so UBI's own message is not lost. After construction the object sends only its `instrument_id` on every request, so the identity fields are never parsed again.
+
+### What the `instrument_id` is
+
+The `instrument_id` is a UUID that UBI computes rather than hands out. It is a UUID version 5 of the instrument's natural key, which is its exchange, its segment, its shape and its identity fields joined together, so every broker that lists the same instrument arrives at the same id, and the id stays the same from one day to the next. [Naming an instrument](https://pramodathani.github.io/unified_broker_interface/rest-api/instruments/#naming-an-instrument) on the UBI site explains the key in full.
+
+This package never computes the id itself. The table below shows the two ways a constructor can send the lookup, the third way of skipping it, and which classes use each.
+
+| Lookup | What is sent | Used by |
+|---|---|---|
+| By identity | `exchange`, `segment` and the identity fields for the segment's shape | The twenty-seven named classes, always |
+| By id | `instrument_id` alone | `Instrument`, `TradeableInstrument`, `NonTradeableInstrument` and the five derivative base classes when you pass `instrument_id =` |
+| From details already fetched | Nothing, because UBI's answer is passed in | `Instrument`, `TradeableInstrument` and `NonTradeableInstrument` when you pass `details =`, which is how an [asset basket](guide-asset-baskets.html) builds every member from one list request |
+
+Two instrument objects are the same instrument when their `instrument_id` values are equal, and the `equals()` method compares them that way, so `first$equals(second)` is `TRUE` for an instrument built by id and the same instrument built from its fields. R6 objects are not used as keys of a list, so the R port has no counterpart of the Python library's hashing; when you need to key something by instrument, use its `instrument_id` as the name.
+
+## The fields set on lookup
+
+The constructor copies UBI's answer into plain public fields, which never change for the life of the object. The table below lists each one with its R type and the value captured for RELIANCE from a local UBI on 2026-09-26, when the Python library read it.
+
+| Field | Type | RELIANCE | Description |
+|---|---|---|---|
+| `instrument_id` | character | `"3f92570a-9924-5bf5-9f9d-e006cd9f4202"` | UBI's UUID for the instrument, the same at every broker |
+| `exchange` | character | `"nse"` | The exchange, lower case |
+| `segment` | character | `"nse_equities"` | The segment, always with the exchange as a prefix |
+| `shape` | character | `"security"` | `security`, `future` or `option` |
+| `symbol` | character or `NULL` | `"RELIANCE"` | The symbol of a security, or `NULL` for a future or an option |
+| `underlying_symbol` | character or `NULL` | `NULL` | The underlying of a future or an option |
+| `expiry_date` | `Date` or `NULL` | `NULL` | The expiry of a future or an option |
+| `strike_price` | numeric or `NULL` | `NULL` | The strike price of an option |
+| `option_type` | character or `NULL` | `NULL` | `CE` or `PE` for an option |
+| `underlying_instrument_id` | character or `NULL` | `NULL` | UBI's id for the instrument a future or an option is written on, resolved from the brokers' own records, or `NULL` for a security or when UBI does not say |
+| `mapping_date` | `Date` | `2026-09-26` | The day of the UBI mapping the details were read from |
+| `first_seen_date` | `Date` or `NULL` | `2026-08-07` | The first day UBI saw the instrument |
+| `last_seen_date` | `Date` or `NULL` | `2026-09-26` | The last day UBI saw the instrument |
+| `lot_size` | integer or `NULL` | `1` | Underlying units in one lot, or `NULL` when the brokers tie |
+| `tick_size` | numeric or `NULL` | `0.1` | The smallest price step in rupees, or `NULL` when the brokers tie |
+| `carried_by` | list of named lists | nine entries, below | One entry per broker that carries the instrument, with that broker's own figures |
+
+The Python library keeps `tick_size` as an exact `Decimal`. R has no decimal type in base R, so the R port converts it to an ordinary number.
+
+`carried_by` keeps each broker's own spelling of the instrument, exactly as UBI stores it, with the numbers as strings. The table below is RELIANCE's full list from the same capture, with a missing value shown as `NULL`.
+
+| `broker` | `broker_token` | `order_symbol` | `lot_size` | `tick_size` |
+|---|---|---|---|---|
+| `dhan` | `2885` | `NULL` | `"1.0"` | `"0.1"` |
+| `flattrade` | `2885` | `"RELIANCE-EQ"` | `"1.0"` | `NULL` |
+| `fyers` | `10100000002885` | `"NSE:RELIANCE-EQ"` | `"1.0"` | `"0.1"` |
+| `groww` | `2885` | `"RELIANCE"` | `"1.0"` | `"0.1"` |
+| `indmoney` | `2885` | `NULL` | `"1.0"` | `"0.1"` |
+| `kotak` | `2885` | `"RELIANCE-EQ"` | `"1.0"` | `"0.1"` |
+| `shoonya` | `2885` | `"RELIANCE-EQ"` | `"1.0"` | `"0.1"` |
+| `stoxkart` | `2885` | `NULL` | `"1.0"` | `"0.1"` |
+| `zerodha` | `738561` | `"RELIANCE"` | `"1.0"` | `"0.1"` |
+
+::: {.alert .alert-warning}
+**Use `lot_size` and `tick_size`, not a `carried_by` entry.**
+
+The brokers do not always agree on units, and on MCX one broker's lot is another's single unit. The top-level `lot_size` and `tick_size` are the values UBI decided on for the instrument itself. For currencies even `lot_size` is not the lot an order is measured against; [Currencies](asset-classes-currencies.html) explains why. This package never checks a quantity or a price against either figure before sending an order.
+:::
+
+The example below prints every public field of the RELIANCE object with `str()`, which shows each value with its type. An R6 object is an environment, so `reliance[[field_name]]` reads a field by its name.
+
+```{r}
+field_names <- c(
+  "instrument_id",
+  "exchange",
+  "segment",
+  "shape",
+  "symbol",
+  "underlying_symbol",
+  "expiry_date",
+  "strike_price",
+  "option_type",
+  "underlying_instrument_id",
+  "mapping_date",
+  "first_seen_date",
+  "last_seen_date",
+  "lot_size",
+  "tick_size"
+)
+for (field_name in field_names) {
+  cat(field_name, ": ", sep = "")
+  str(reliance[[field_name]])
+}
+str(reliance$carried_by[1:2])
+```
+
+## shared_unified_broker_interface
+
+The function is called as `Instrument$shared_unified_broker_interface()`, on the class generator rather than on an object.
+
+This function returns the one UBI client that every instrument, and the [account](guide-account.html), sends its requests through, creating it the first time it is asked. UBI holds a single access token for the whole application, so separate clients would only add logins; sharing one client keeps everything in one session. The client is stored once for the whole package, so every class shares the same one.
+
+R6 class generators do not inherit functions stored on them, so the function exists only on `Instrument`: `Equity$shared_unified_broker_interface` is `NULL`, and an object such as `reliance` has no such method. The R port adds a companion, `Instrument$set_shared_unified_broker_interface(unified_broker_interface)`, which installs a client of your own as the shared one, such as a client built with the `credentials` argument described on [The UBI client](guide-client.html#unifiedbrokerinterface).
+
+#### Parameters
+
+This function takes no arguments.
+
+#### Example
+
+The example below reads the shared client and asks UBI whether its session is connected. No output was captured for it.
+
+```{r}
+client <- Instrument$shared_unified_broker_interface()
+print(client$status())
+```
+
+#### Returns
+
+The shared [`UnifiedBrokerInterface`](guide-client.html).
+
+#### Errors
+
+The table below lists the conditions the function can signal the first time it creates the client.
+
+| Condition | When |
+|---|---|
+| A plain R error | The UBI base url is not configured, or the MongoDB `settings` document with UBI's key and secret is missing |
+
+## Instrument
+
+The constructor is called as `Instrument$new(instrument_id = NULL, exchange = NULL, segment = NULL, symbol = NULL, underlying_symbol = NULL, expiry_date = NULL, strike_price = NULL, option_type = NULL, unified_broker_interface = NULL, details = NULL)`, and it sends `GET /api/instruments/details`.
+
+[`Instrument`](../reference/Instrument.html) is the base of every instrument. It holds the lookup, the fields above, [`prices`](guide-market-data.html#prices), [`quote`](guide-market-data.html#quote), [`last_price`](guide-market-data.html#last_price) and [`ohlc`](guide-market-data.html#ohlc), and it inherits the chain of analysis classes described under [Analysis](analysis.html), the last of which is the [performance measures](analysis-performance.html). You rarely build one directly; it is useful when all you have is an `instrument_id`, such as one read from an order row, and you do not care which class it belongs to.
+
+#### Parameters
+
+The table below lists the constructor's arguments.
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `instrument_id` | character or `NULL` | One spelling | `NULL` | The instrument's UUID. When given, it is sent alone. |
+| `exchange` | character or `NULL` | The other spelling | `NULL` | The exchange |
+| `segment` | character or `NULL` | The other spelling | `NULL` | The segment, bare such as `equities` or prefixed such as `nse_equities` |
+| `symbol` | character or `NULL` | For a security | `NULL` | The symbol |
+| `underlying_symbol` | character or `NULL` | For a future or option | `NULL` | The underlying's symbol |
+| `expiry_date` | `Date`, character or `NULL` | For a future or option | `NULL` | The expiry |
+| `strike_price` | numeric or `NULL` | For an option | `NULL` | The strike price |
+| `option_type` | character or `NULL` | For an option | `NULL` | `CE` or `PE` |
+| `unified_broker_interface` | `UnifiedBrokerInterface` or `NULL` | No | `NULL` | The client, or `NULL` for the shared one |
+| `details` | named list or `NULL` | No | `NULL` | UBI's answer for this instrument from `/api/instruments/details`, such as one entry of a list request, used instead of looking the instrument up again. `NULL` sends the lookup. |
+
+#### Example
+
+This example builds the same share by its id; the id is the one captured for RELIANCE above.
+
+```{r}
+same_share <- Instrument$new(
+  instrument_id = "3f92570a-9924-5bf5-9f9d-e006cd9f4202"
+)
+stopifnot(same_share$equals(reliance))
+```
+
+#### Returns
+
+The constructor returns an `Instrument` with the fields above.
+
+#### Errors
+
+The table below lists the conditions the constructor can signal.
+
+| Condition | When |
+|---|---|
+| [`InstrumentError`](guide-errors.html#instrumenterror) | UBI has no instrument matching the lookup |
+| [`BadRequestError`](guide-errors.html#badrequesterror) | The lookup is incomplete or malformed, such as a future without an `expiry_date` or an id that is not a UUID |
+| [`UnifiedBrokerInterfaceError`](guide-errors.html#unifiedbrokerinterfaceerror) | Any other failure reported by, or on the way to, UBI |
+
+## TradeableInstrument
+
+The constructor is called as `TradeableInstrument$new(...)` with the same arguments as `Instrument$new()`, and it sends `GET /api/instruments/details`.
+
+[`TradeableInstrument`](../reference/TradeableInstrument.html) takes the same arguments as `Instrument`, including `details`, and adds everything that needs an order book or an account: the [order-book values](guide-market-data.html#the-order-book-values), [orders](guide-orders.html), the [price wrappers](guide-price-wrappers.html) and [positions](guide-positions.html). After the lookup it checks that the segment does not end in `_indices`, because an index cannot be traded.
+
+#### Errors
+
+The table below lists the conditions the constructor can signal.
+
+| Condition | When |
+|---|---|
+| [`TradeableInstrumentError`](guide-errors.html#tradeableinstrumenterror) | The instrument is an index |
+| [`InstrumentError`](guide-errors.html#instrumenterror) | UBI has no instrument matching the lookup |
+| [`BadRequestError`](guide-errors.html#badrequesterror) | The lookup is incomplete or malformed |
+
+## NonTradeableInstrument
+
+The constructor is called as `NonTradeableInstrument$new(...)` with the same arguments as `Instrument$new()`, and it sends `GET /api/instruments/details`.
+
+[`NonTradeableInstrument`](../reference/NonTradeableInstrument.html) takes the same arguments as `Instrument`, including `details`, and accepts only an index, which is any instrument whose segment ends in `_indices`. It has candles, quotes and analysis, but no order book and no order members. In Python, reading `nifty.best_bid` raises an `AttributeError`; in R, an R6 object is an environment, so reading `nifty$best_bid` quietly returns `NULL` without sending a request, and code should not take that `NULL` to mean an empty book.
+
+#### Errors
+
+The table below lists the conditions the constructor can signal.
+
+| Condition | When |
+|---|---|
+| [`NonTradeableInstrumentError`](guide-errors.html#nontradeableinstrumenterror) | The instrument is not an index, so it can be traded |
+| [`InstrumentError`](guide-errors.html#instrumenterror) | UBI has no instrument matching the lookup |
+| [`BadRequestError`](guide-errors.html#badrequesterror) | The lookup is incomplete or malformed |
+
+## constituents
+
+The active binding is read as `nifty$constituents`, and it reads MongoDB's `asset_baskets` collection and then sends `POST /api/instruments/details`.
+
+This active binding returns the stored [asset basket](guide-asset-baskets.html) of what an index or a fund holds, with the instrument itself as the basket's `linked_instrument`. It exists on `NonTradeableInstrument`, and so on all four index classes, and on `ExchangeTradedFund` and `MutualFund`. UBI stores no index constituents or fund holdings, so a basket exists only when one was saved with this instrument as its linked instrument, for instance by [`BasketCsvImporter`](guide-asset-baskets.html#basketstore-and-basketcsvimporter). It is read from MongoDB and UBI on every access.
+
+The instrument keeps its own official price, and the basket describes what it holds, so the two can be compared. On a fund, `constituents` is the fund's own portfolio, which is different from [`holdings`](guide-holdings.html#holdings), the units of the fund your account holds. A mutual fund has no candles in UBI, so its own performance measures return `NULL` and its `constituents` are the only way to measure it.
+
+The table below lists which basket class each instrument's `constituents` usually returns.
+
+| Instrument | Basket class |
+|---|---|
+| `NonTradeableInstrument` and the four index classes, such as `EquityIndex` | Usually [`Index`](../reference/Index.html) |
+| `ExchangeTradedFund` | [`ExchangeTradedFundConstituents`](../reference/ExchangeTradedFundConstituents.html) |
+| `MutualFund` | [`MutualFundConstituents`](../reference/MutualFundConstituents.html) |
+
+The basket is rebuilt as whatever kind it was stored as, so the class depends on the stored document rather than on the instrument.
+
+#### Example
+
+The example below reads the NIFTY basket stored by the import on [Asset baskets](guide-asset-baskets.html#basketstore-and-basketcsvimporter). When the Python version was captured on 2026-09-28, the basket printed as `Index(name='NIFTY FIVE', size=5)`.
+
+```{r}
+nifty <- EquityIndex$new(exchange = "nse", symbol = "NIFTY")
+five <- nifty$constituents
+print(five)
+```
+
+#### Returns
+
+The stored basket in effect today, as the [`AssetBasket`](../reference/AssetBasket.html) subclass its stored kind names, or `NULL` when no basket is stored for this instrument.
+
+#### Errors
+
+The table below lists the conditions reading the binding can signal.
+
+| Condition | When |
+|---|---|
+| [`BasketMemberError`](guide-errors.html#basketmembererror) | UBI could not find one or more of the stored members |
+| [`AssetBasketError`](guide-errors.html#assetbasketerror) | The stored kind is not one the store knows |
+| An error from the mongolite package | MongoDB could not be reached |
+
+## The derivative base classes
+
+The constructors are called as `Derivative$new(...)`, `Futures$new(...)`, `Option$new(...)`, `IndexFutures$new(...)` and `IndexOption$new(...)`, and each sends `GET /api/instruments/details`.
+
+These five classes sit between `TradeableInstrument` and the sixteen futures and option classes, and hold what every contract of their kind shares. Their members are documented on [Derivatives](guide-derivatives.html), and the discovery functions they define are on [Finding instruments](guide-discovery.html). Each takes the same arguments as `Instrument`, including `instrument_id`, except that it adds `underlying` and has no `details`, and each checks what UBI returned. The table below lists what each one accepts.
+
+| Class | Base | Accepts |
+|---|---|---|
+| [`Derivative`](../reference/Derivative.html) | `TradeableInstrument` | A future or an option with an expiry date, in one of the sixteen derivative segments |
+| [`Futures`](../reference/Futures.html) | `Derivative` | A futures contract, on anything including an index |
+| [`Option`](../reference/Option.html) | `Derivative` | An option with a strike price and an option type, on anything including an index |
+| [`IndexFutures`](../reference/IndexFutures.html) | `Futures` | A futures contract in an index futures segment |
+| [`IndexOption`](../reference/IndexOption.html) | `Option` | An option in an index options segment |
+
+You normally build a family class such as `EquityOption`. Building a base class directly is useful when you hold an `instrument_id`, from an order or a position row for example, and want the contract's members without knowing its family. The example below builds one from the id of a NIFTY future. When the Python version was captured from a local UBI on 2026-09-28, the contract printed as `Futures(exchange='nse', segment='nse_equity_index_futures', underlying_symbol='NIFTY', expiry_date='2026-09-29')`, it equalled the family object, and its underlying was a `NonTradeableInstrument`.
+
+```{r}
+nifty_future <- EquityIndexFutures$new(
+  exchange = "nse",
+  underlying_symbol = "NIFTY",
+  expiry_date = "2026-09-29"
+)
+contract <- Futures$new(instrument_id = nifty_future$instrument_id)
+print(contract)
+print(contract$equals(nifty_future))
+print(class(contract$underlying)[[1]])
+```
+
+#### Errors
+
+The table below lists the conditions the constructors can signal.
+
+| Condition | When |
+|---|---|
+| [`DerivativeError`](guide-errors.html#derivativeerror) | The instrument is not a future or an option, has no expiry date, or is in a segment with no known underlying segment and no `underlying` was given |
+| `TypeError` | `underlying` is given and is not an instrument |
+| [`FuturesError`](guide-errors.html#futureserror), [`OptionError`](guide-errors.html#optionerror) | The contract is the other kind, or an option lacks a strike price or option type |
+| [`IndexFuturesError`](guide-errors.html#indexfutureserror), [`IndexOptionError`](guide-errors.html#indexoptionerror) | The contract is not written on an index |
+| [`InstrumentError`](guide-errors.html#instrumenterror) | UBI has no instrument matching the lookup |
+| [`BadRequestError`](guide-errors.html#badrequesterror) | The lookup is incomplete or malformed |
+
+## Lookup errors at a glance
+
+The table below gathers every way building an instrument can fail, in the order the checks happen.
+
+| Step | What fails | Condition |
+|---|---|---|
+| 1. Creating the shared client | No base url, or no key and secret in MongoDB | A plain R error |
+| 2. Reading the arguments | A required argument is missing | R's "argument is missing" error, before any request |
+| 3. Sending the lookup | UBI cannot be reached | [`UnreachableError`](guide-errors.html#unreachableerror) |
+| 4. UBI reads the parameters | An unknown exchange or segment, or a missing identity field | [`BadRequestError`](guide-errors.html#badrequesterror) |
+| 5. UBI looks the instrument up | Nothing matches on the latest mapping date | The class's own error, such as [`EquityError`](guide-errors.html#equityerror), or [`InstrumentError`](guide-errors.html#instrumenterror) for the base classes |
+| 6. The tradeable check | The index-ness disagrees with the base class | [`TradeableInstrumentError`](guide-errors.html#tradeableinstrumenterror) or [`NonTradeableInstrumentError`](guide-errors.html#nontradeableinstrumenterror) |
+| 7. The derivative checks | A derivative base class is given the wrong kind of contract | [`DerivativeError`](guide-errors.html#derivativeerror), then the error of the class itself |
+
+The first two steps swap places compared with the Python library. Python checks the arguments when the constructor is called, while R evaluates an argument only when it is first used, which happens after `Instrument$new()` has fetched the shared client. Creating the client sends no request, so in both languages a missing argument is reported before anything reaches UBI.
+
+::: {.alert .alert-info}
+**Under the hood.**
+
+The request is `GET /api/instruments/details` with `instrument_id` alone, or with every lookup argument that is not `NULL`. UBI decides which identity fields a segment's shape needs and answers 400 when some are missing, so this package keeps no segment table of its own. See [Details](https://pramodathani.github.io/unified_broker_interface/rest-api/instruments/#details) on the UBI site for the route, and `.claude/notes/R/assets_instruments.R.md` for the reasoning behind the R port of the lookup.
+:::

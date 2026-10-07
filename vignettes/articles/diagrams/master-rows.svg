@@ -1,0 +1,24 @@
+<svg width="900" height="192" viewBox="0 0 900 192" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="chart-title chart-description">
+  <title id="chart-title">Rows streamed by /api/instruments/master on 2026-09-20</title>
+  <desc id="chart-description">A bar chart of the rows each segment master streamed on 2026-09-20: 23 for nse_equity_index_futures in about 0.0 seconds, 14,826 for nse_equity_index_options in 0.2 seconds, and 125,967 for nse_equity_options in 1.3 seconds.</desc>
+  <style>
+    text { fill: #202124; font-family: 'Roboto', sans-serif; font-size: 13px; }
+    text.title { font-size: 15px; font-weight: 700; }
+    text.small { fill: #6b7280; font-size: 11px; }
+    text.mono { font-family: 'Roboto Mono', monospace; font-size: 12px; }
+    .axis { stroke: #5f6368; stroke-width: 1; }
+  </style>
+  <rect x="0" y="0" width="900" height="192" fill="#ffffff"/>
+  <text class="title" x="20" y="28">Rows streamed by /api/instruments/master on 2026-09-20</text>
+  <text class="mono" x="240" y="66" text-anchor="end">nse_equity_index_futures</text>
+  <rect x="250" y="50" width="1" height="24" rx="3" fill="#ff5722"/>
+  <text x="257" y="66">23</text>
+  <text class="mono" x="240" y="100" text-anchor="end">nse_equity_index_options</text>
+  <rect x="250" y="84" width="66" height="24" rx="3" fill="#ff5722"/>
+  <text x="322" y="100">14,826</text>
+  <text class="mono" x="240" y="134" text-anchor="end">nse_equity_options</text>
+  <rect x="250" y="118" width="560" height="24" rx="3" fill="#ff5722"/>
+  <text x="816" y="134">125,967</text>
+  <line class="axis" x1="250" y1="46" x2="250" y2="146"/>
+  <text class="small" x="250" y="166">Rows in the segment master; the three took about 0.0, 0.2 and 1.3 seconds</text>
+</svg>

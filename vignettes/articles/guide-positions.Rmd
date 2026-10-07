@@ -1,0 +1,489 @@
+---
+title: "Positions"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+A position is what a futures or options trade, or an intraday trade in shares, leaves open: a quantity you are long or short that has not been closed yet. The members on this page read this instrument's positions and change them without being told which side you are on, so a long position is reduced by selling and a short one by buying back. Shares kept in a demat account are holdings rather than positions, and they are on [Holdings](guide-holdings.html). Every member on this page is defined on [TradeableInstrument](../reference/TradeableInstrument.html).
+
+::: {.alert .alert-danger}
+**These are real orders.**
+
+The four members marked "places orders" send market or limit orders through UBI to real brokers, with real money, and none of them takes a `dry_run` argument. `reduce_position()` and `liquidate_position()` also let UBI choose the side, which is the point of them, so read [`net_positions`](#net_positions) first and be sure of what you hold. To preview one, send the same body through [`place_order()`](guide-orders.html#place_order) with `dry_run = TRUE`, as [Under the hood](#reduce_position) shows.
+:::
+
+The table below lists the eight members this page documents.
+
+| Kind | Member | Description |
+|---|---|---|
+| active binding | [`net_positions`](#net_positions) | The positions held in this instrument now, merged across every broker. |
+| active binding | [`day_positions`](#day_positions) | Today's own positions in this instrument, without what was carried in. |
+| active binding | [`positions_value`](#positions_value) | What this instrument's open positions are worth at the moment. |
+| active binding | [`positions_pnl`](#positions_pnl) | What this instrument's positions have made or lost. |
+| places orders | [`add_to_position()`](#add_to_position) | Makes an existing position bigger, or opens a new one. |
+| places orders | [`reduce_position()`](#reduce_position) | Makes an existing position smaller, without turning it around. |
+| places orders | [`liquidate_position()`](#liquidate_position) | Closes one position in this instrument completely. |
+| places orders | [`liquidate_all_positions()`](#liquidate_all_positions) | Closes every position this instrument holds, under every product. |
+
+## Two names for one product
+
+UBI names a position's product with one set of words and takes orders with another, and this is the trap on this page. A position you opened with `product = "mis"` comes back from [`net_positions`](#net_positions) with `product` set to `intraday`. The table below shows the whole mapping.
+
+| Product an order is sent with | Product a position reports | Can the package close it? |
+|---|---|:---:|
+| `cnc` | `delivery` | yes |
+| `mis` | `intraday` | yes |
+| `nrml` | `carry` | yes |
+| none | `margin_trading` | no |
+| none | `cover` | no |
+| none | `bracket` | no |
+
+Every member that changes a position takes `product` in the order spelling, `cnc`, `mis` or `nrml`, and translates it. The last three rows come from order kinds UBI's place route cannot send, such as a broker's own bracket or cover order, so there is no order these members could write to close them. `add_to_position()`, `reduce_position()` and `liquidate_position()` ignore those positions entirely, as though they were not there, which means you can hold a `bracket` position and be told nothing is held. `liquidate_all_positions()` reports each one as ignored instead, with the reason, and such a position has to be closed at the broker directly. `positions_value` and `positions_pnl` count all six, because every one of them is real money.
+
+## How the side is chosen
+
+The flowchart below shows how each of the four writing members decides which side to send. `add_to_position()` works the side out itself and sends a plain order. `reduce_position()` and `liquidate_position()` hand the decision to UBI, which reads the position when it sends the order.
+
+<pre class="mermaid">
+flowchart TD
+    subgraph ADD["add_to_position"]
+        A1["read net_positions,&lt;br/&gt;keep delivery, intraday, carry"] --&gt; A2{"anything held?"}
+        A2 -- "no" --&gt; A3{"transaction_type and&lt;br/&gt;product both given?"}
+        A3 -- "no" --&gt; A4["PositionError"]
+        A3 -- "yes" --&gt; A5["open a new position&lt;br/&gt;on the side given"]
+        A2 -- "yes" --&gt; A6{"exactly one position,&lt;br/&gt;or a product named&lt;br/&gt;that is held?"}
+        A6 -- "no" --&gt; A4
+        A6 -- "yes" --&gt; A7{"quantity above zero?"}
+        A7 -- "long" --&gt; A8["side is buy"]
+        A7 -- "short" --&gt; A9["side is sell"]
+        A8 --&gt; A10{"transaction_type given&lt;br/&gt;and different?"}
+        A9 --&gt; A10
+        A10 -- "yes" --&gt; A4
+        A10 -- "no" --&gt; A11["plain market or limit order,&lt;br/&gt;works in either mode"]
+    end
+    subgraph CLOSE["reduce_position and liquidate_position"]
+        C1{"product named?"} -- "no" --&gt; C2{"exactly one&lt;br/&gt;tradeable position?"}
+        C2 -- "no" --&gt; C3["PositionError"]
+        C2 -- "yes" --&gt; C4["use its product"]
+        C1 -- "yes" --&gt; C5{"cnc, mis or nrml?"}
+        C5 -- "no" --&gt; C3
+        C5 -- "yes" --&gt; C6["send a placeholder sell&lt;br/&gt;with a quantity_reference"]
+        C4 --&gt; C6
+        C6 --&gt; C7{"UBI reads the net position"}
+        C7 -- "long" --&gt; C8["UBI sends SELL"]
+        C7 -- "short" --&gt; C9["UBI sends BUY"]
+        C7 -- "nothing held" --&gt; C10["ConflictError, HTTP 409"]
+    end
+</pre>
+
+The practical difference between the two paths is where a mistake is caught. A missing position is a `PositionError` signalled here when you named no product, because the package had to read the positions to find the only one. When you named a product, nothing is read here, and a product that is not held comes back from UBI as `ConflictError`.
+
+## The quantity reference UBI resolves
+
+`reduce_position()` and `liquidate_position()` send a `quantity_reference`, a small named list that describes the quantity instead of stating it. UBI's order engine reads the account's positions when it sends the order, adds up the signed quantity of every row for this instrument and product, and decides the quantity and the side from that total. The table below lists the four kinds UBI accepts; the package sends the last two.
+
+| `kind` | Quantity sent | Side sent | Refused when |
+|---|---|---|---|
+| `absolute` | The body's `quantity` | The body's `transaction_type` | `quantity` is missing or below 1 |
+| `add_to_position` | The body's `quantity` | The body's `transaction_type` | `quantity` is missing or below 1 |
+| `reduce_position` | The smaller of the body's `quantity` and the position | `SELL` for a long, `BUY` for a short | Nothing is held (HTTP 409) |
+| `liquidate_position` | The whole position | `SELL` for a long, `BUY` for a short | Nothing is held (HTTP 409) |
+
+The reference's optional `product` is spelled the positions' way, `delivery`, `intraday` or `carry`, not the order way. The package translates it for you. UBI's `add_to_position` kind reads no position, so it cannot choose a side, and that is why `add_to_position()` still works the side out in the package rather than sending a reference.
+
+UBI's order engine resolves the quantity reference when it sends the order, so `reduce_position()` and `liquidate_position()` need the engine running, and UBI refuses them with HTTP 503, signalled as `ServiceUnavailableError`, when it is not. UBI's page on [quantity references](https://pramodathani.github.io/unified_broker_interface/rest-api/price-quantity-references/#quantity-references) has the full rules.
+
+## Reading positions
+
+UBI serves the whole account's positions and has no route for one instrument, so each active binding below sends one request per access and keeps this instrument's rows. UBI merges positions across brokers by instrument and product, so one instrument gives one row per product it is held under, and no row names a broker. Assign the result to a variable when you need it twice.
+
+### net_positions
+
+This active binding reads `GET /api/portfolio/positions`. It gives the positions held in this instrument now, whenever they were opened. It is UBI's `net` bucket, and it is the one every other member on this page reads.
+
+#### Example
+
+The example below prints the RELIANCE positions. When the Python version was run against a local UBI on 2026-09-26, no position was held in RELIANCE, so the property returned nothing, which in R is `NULL`.
+
+```{r}
+reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+print(reliance$net_positions)
+```
+
+#### Returns
+
+The active binding gives a `data.frame` with one row per product held, or `NULL` when nothing is held in this instrument. The columns are UBI's position fields, listed below. The fields that hold nested objects, `buy`, `sell` and `pnl`, are list columns, so `frame$pnl[[1]][["realized"]]` reads the first row's realised profit.
+
+| Column | Type | Description |
+|---|---|---|
+| `instrument_id` | character | The instrument. |
+| `symbol` | character | The symbol for a security, or the underlying for a derivative. |
+| `exchange` | character | The exchange. |
+| `segment` | character | The exchange-prefixed segment, such as `mcx_commodity_futures`. |
+| `expiry_date`, `strike_price`, `option_type` | character, numeric, character, or `NA` | The contract, for a derivative. |
+| `product` | character | `delivery`, `intraday`, `carry`, `margin_trading`, `cover` or `bracket`. |
+| `quantity` | numeric | The net quantity in units, positive when long and negative when short. |
+| `buy`, `sell` | list column of named lists | Each side's `quantity`, `average_price` and `value`. |
+| `average_price` | numeric | The average price of the open quantity. |
+| `last_price` | numeric or `NA` | From the live quote when there is one, otherwise the price a broker sent. |
+| `pnl` | list column of named lists | `realized`, `unrealized` and `total`, as the brokers report them. |
+| `day_change`, `day_change_percentage` | numeric or `NA` | The change since the previous close. |
+
+#### Errors
+
+The table below lists the conditions the active binding signals.
+
+| Condition | When |
+|---|---|
+| `BrokerError` | No broker's positions could be read. |
+| `ServiceUnavailableError` | UBI's positions document is missing or more than 30 seconds old. |
+| `UnifiedBrokerInterfaceError` | Any other failure reported by, or on the way to, UBI. |
+
+### day_positions
+
+This active binding reads `GET /api/portfolio/positions`. It gives only what was opened and closed today in this instrument, UBI's `day` bucket. It has the same columns as [`net_positions`](#net_positions) and signals the same conditions. It is usually `NULL` even when `net_positions` is not, because only some brokers report positions on a day basis at all, so use `net_positions` to find out what you hold.
+
+### positions_value
+
+This active binding reads `GET /api/portfolio/positions`. It says what the positions in this instrument are worth, in rupees. UBI prices a holding for you but not a position, so the package multiplies each position's signed quantity by its last price and adds them up across products. The sign is kept: a long position adds and a short one subtracts, because a short position is an obligation to buy back. When any position has no last price, the whole answer is `NULL`, rather than a total quietly missing one of its parts.
+
+#### Example
+
+The example below prints the value of two instruments' positions. In the Python version's run on 2026-09-26, the first gave nothing, because nothing was held in RELIANCE that day, which in R is `NULL`. The second line assumes `crude_oil_future` is a `CommodityFutures` object holding a short position of 100 units of an MCX crude oil future with a last price of 5712.0, which is the illustrative row on UBI's positions page; worked out from the code, it gives -571200.
+
+```{r}
+print(reliance$positions_value)
+print(crude_oil_future$positions_value)
+```
+
+#### Returns
+
+The active binding gives a single numeric value in rupees, rounded to two decimal places, or `NULL` when nothing is held or any position has no last price. It counts positions under all six products.
+
+#### Errors
+
+It signals the same conditions as [`net_positions`](#net_positions).
+
+### positions_pnl
+
+This active binding reads `GET /api/portfolio/positions`. It says what the positions in this instrument have made or lost. The realised part is profit already booked by closing some of a position today, and the unrealised part is what is still riding on what remains open. Both are added across every product, and the total is worked out from the two sums.
+
+#### Example
+
+The example below prints the profit of the same illustrative crude oil position, whose row reports an unrealised profit of 1800.0 and nothing realised. Worked out from the code, the answer is a named list with `realized` of 0, `unrealized` of 1800 and `total` of 1800.
+
+```{r}
+print(crude_oil_future$positions_pnl)
+```
+
+#### Returns
+
+The active binding gives a named list with numeric `realized`, `unrealized` and `total` in rupees, each rounded to two decimal places, or `NULL` when nothing is held. A holding's profit list has different names, as [Holdings](guide-holdings.html#holdings_pnl) explains.
+
+#### Errors
+
+It signals the same conditions as [`net_positions`](#net_positions).
+
+## Changing a position
+
+The four members below place orders. `price` is optional on all of them: given, it sends a limit order at that price, and left out, it sends a market order, which is what closing a position usually means. The three members that close a position send that market order with `synthetic = list(type = "simple", closes_position = TRUE)`, so the broker receives a real market order. `add_to_position()` sends it through `buy_at_market_price()` or `sell_at_market_price()`, which UBI runs as a limit following the other side of the book for 30 seconds, refused with HTTP 409 when that side is empty.
+
+### add_to_position
+
+The method's signature is shown below. It places orders: it sends `GET /api/portfolio/positions`, then `POST /api/orders/place`.
+
+```r
+add_to_position(
+  quantity,
+  product = NULL,
+  transaction_type = NULL,
+  price = NULL,
+  validity = NULL,
+  after_market = FALSE,
+  tag = NULL
+)
+```
+
+This method makes an existing position bigger, or opens a new one. It reads the positions, and the direction follows the one you hold: a long position is added to by buying and a short one by selling. `transaction_type` is needed only when nothing is held yet, and then `product` is needed too, because neither can be read from a position that does not exist. A `transaction_type` that contradicts the position held signals `PositionError` and points you at `reduce_position()`, rather than silently reducing the position.
+
+It sends a plain market or limit order through [`buy_at_market_price()`](guide-price-wrappers.html#buy_at_market_price) and its three siblings. A limit order sent this way is held by UBI's order engine until the book reaches its price, and a market order is sent as a `marketable_limit`, as [Price wrappers](guide-price-wrappers.html#market-and-limit) explains.
+
+#### Parameters
+
+The table below lists the method's parameters.
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `quantity` | integer | yes | | The quantity to add, in units and always positive, whichever way the position points. |
+| `product` | character or `NULL` | no | `NULL` | The position to add to, as `cnc`, `mis` or `nrml`. Needed when several positions are held, and when none is. |
+| `transaction_type` | character or `NULL` | no | `NULL` | `buy` or `sell`, used only to open a position when none is held. |
+| `price` | numeric or `NULL` | no | `NULL` | A limit price in rupees, or `NULL` for a market order. |
+| `validity` | character or `NULL` | no | `NULL` | `day` or `ioc`. UBI uses `day` when it is `NULL`. |
+| `after_market` | logical | no | `FALSE` | `TRUE` sends an after-market order. |
+| `tag` | character or `NULL` | no | `NULL` | A label of up to twenty letters and digits. |
+
+#### Example
+
+The example below adds 100 units to a gold futures position, whichever way it points, and opens a new intraday short in shares where nothing is held.
+
+```{r}
+gold <- CommodityFutures$new(
+  exchange = "mcx",
+  underlying_symbol = "GOLD",
+  expiry_date = "2026-10-05"
+)
+gold$add_to_position(quantity = 100)
+
+reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+reliance$add_to_position(
+  quantity = 10,
+  product = "mis",
+  transaction_type = "sell",
+  price = 1230
+)
+```
+
+#### Returns
+
+The method returns the named list that [`place_order()`](guide-orders.html#place_order) returns.
+
+#### Errors
+
+The table below lists the conditions the method signals.
+
+| Condition | When |
+|---|---|
+| `PositionError` | Several positions are held and none was named, a product was named that is not held while another is, the direction given contradicts the position held, or nothing is held and `transaction_type` and `product` were not both given. |
+| `UnifiedBrokerInterfaceError` | Any failure reported by, or on the way to, UBI, including every condition [`place_order()`](guide-orders.html#place_order) can signal. |
+
+::: {.alert .alert-info}
+**Opening a second product.**
+
+When a position is already held under one product, naming a different product signals `PositionError` rather than opening a second position, because the method only adds to what it can find. Open the second position with a price wrapper or `place_order()` instead.
+:::
+
+### reduce_position
+
+The method's signature is shown below. It places orders, and it sends `POST /api/orders/place`.
+
+```r
+reduce_position(
+  quantity,
+  product = NULL,
+  price = NULL,
+  validity = NULL,
+  after_market = FALSE,
+  tag = NULL
+)
+```
+
+This method makes an existing position smaller without turning it round. It sends one order carrying a `reduce_position` quantity reference, and UBI works out the side from the position when it sends the order: a long position is reduced by selling and a short one by buying. UBI also caps the order at what is held, so asking for more than the position closes the whole of it and never opens a new position the other way round.
+
+When you name no product, the positions are read once here to find the only one held; when you name one, nothing is read here and UBI reads the positions itself.
+
+#### Parameters
+
+The table below lists the method's parameters.
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `quantity` | integer | yes | | The largest quantity to close, in units and always positive. |
+| `product` | character or `NULL` | no | `NULL` | The position to reduce, as `cnc`, `mis` or `nrml`, or `NULL` when only one is held. |
+| `price` | numeric or `NULL` | no | `NULL` | A limit price in rupees, or `NULL` for a market order. |
+| `validity` | character or `NULL` | no | `NULL` | `day` or `ioc`. |
+| `after_market` | logical | no | `FALSE` | `TRUE` sends an after-market order. |
+| `tag` | character or `NULL` | no | `NULL` | A label of up to twenty letters and digits. |
+
+#### Example
+
+The example below halves an intraday futures position of 200 units, whichever way it points.
+
+```{r}
+gold$reduce_position(quantity = 100, product = "mis")
+```
+
+#### Returns
+
+The method returns the named list that [`place_order()`](guide-orders.html#place_order) returns.
+
+#### Errors
+
+The table below lists the conditions the method signals.
+
+| Condition | When |
+|---|---|
+| `PositionError` | No product was named and there is not exactly one tradeable position, or the product named is not `cnc`, `mis` or `nrml`. |
+| `ConflictError` | The product named is not held in this instrument, which UBI answers with HTTP 409. |
+| `ServiceUnavailableError` | UBI's order engine is not running, so nothing was sent. |
+| `UnifiedBrokerInterfaceError` | Any other failure reported by, or on the way to, UBI. |
+
+::: {.alert .alert-info}
+**Under the hood.**
+
+The call in the example sends the body below, worked out from the code. The `transaction_type` of `sell` is a placeholder that UBI replaces, because the route needs a side before the engine reads the reference. The `synthetic` list asks for UBI's plain `simple` order type with `closes_position` set, which lets the order use the part of a broker's daily order cap that UBI keeps for exits, so a day that used up its cap on entries can still close its positions.
+
+```json
+{
+  "instrument_id": "<the gold future's instrument_id>",
+  "transaction_type": "sell",
+  "order_type": "market",
+  "product": "mis",
+  "after_market": false,
+  "dry_run": false,
+  "quantity": 100,
+  "quantity_reference": {"kind": "reduce_position", "product": "intraday"},
+  "synthetic": {"type": "simple", "closes_position": true}
+}
+```
+
+To preview it, send the same fields through `place_order()` with `dry_run = TRUE`, as below.
+
+```{r}
+gold$place_order(
+  transaction_type = "sell",
+  order_type = "market",
+  quantity = 100,
+  product = "mis",
+  dry_run = TRUE,
+  quantity_reference = list(
+    kind = "reduce_position",
+    product = "intraday"
+  ),
+  synthetic = list(
+    type = "simple",
+    closes_position = TRUE
+  )
+)
+```
+:::
+
+### liquidate_position
+
+The method's signature is shown below. It places orders, and it sends `POST /api/orders/place`.
+
+```r
+liquidate_position(
+  product = NULL,
+  price = NULL,
+  validity = NULL,
+  after_market = FALSE,
+  tag = NULL
+)
+```
+
+This method closes one position in this instrument completely. It works exactly like `reduce_position()` except that it sends no quantity and a `liquidate_position` reference, so UBI closes the whole position, selling a long one and buying back a short one.
+
+#### Parameters
+
+The table below lists the method's parameters.
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `product` | character or `NULL` | no | `NULL` | The position to close, as `cnc`, `mis` or `nrml`, or `NULL` when only one is held. |
+| `price` | numeric or `NULL` | no | `NULL` | A limit price in rupees, or `NULL` for a market order. |
+| `validity` | character or `NULL` | no | `NULL` | `day` or `ioc`. |
+| `after_market` | logical | no | `FALSE` | `TRUE` sends an after-market order. |
+| `tag` | character or `NULL` | no | `NULL` | A label of up to twenty letters and digits. |
+
+#### Example
+
+The example below closes the only position held in the gold future, whatever its product and direction.
+
+```{r}
+gold$liquidate_position()
+```
+
+#### Returns
+
+The method returns the named list that [`place_order()`](guide-orders.html#place_order) returns.
+
+#### Errors
+
+It signals the same conditions as [`reduce_position()`](#reduce_position).
+
+### liquidate_all_positions
+
+The method's signature is shown below. It places orders: it sends `GET /api/portfolio/positions`, then one `POST /api/orders/place` per position.
+
+```r
+liquidate_all_positions(
+  price = NULL,
+  validity = NULL,
+  after_market = FALSE,
+  tag = NULL
+)
+```
+
+This method closes every position this instrument holds, under every product. It reads `net_positions` once, then calls `liquidate_position()` for each tradeable product, so each close is one request that UBI sizes and directs. Every position is attempted even when an earlier one fails, and a failure is reported in the returned data frame rather than signalled. A position under `margin_trading`, `cover` or `bracket` is reported as ignored, with the reason, rather than passed over in silence.
+
+It acts on this one instrument. To empty the whole account, cancelling every open order first, use [`Account$flatten()`](guide-account.html#flatten).
+
+#### Parameters
+
+The table below lists the method's parameters.
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `price` | numeric or `NULL` | no | `NULL` | A limit price in rupees for every order, or `NULL` for market orders. |
+| `validity` | character or `NULL` | no | `NULL` | `day` or `ioc`. |
+| `after_market` | logical | no | `FALSE` | `TRUE` sends after-market orders. |
+| `tag` | character or `NULL` | no | `NULL` | A label for every order. |
+
+#### Example
+
+The example below closes everything in the gold future and prints what happened. No real output is shown, because running the method closes real positions. As an illustration worked out from the code, an instrument holding a bracket position, a carried position the broker refused to close and an intraday short would give three rows in UBI's order, which sorts by product. The `bracket` row would have an `order_product` of `NA`, `closed` set to `FALSE` and the error `ignored: UBI cannot send a bracket order, so close this at the broker`. The `carry` row would have an `order_product` of `nrml`, `closed` set to `FALSE` and an error naming the condition, such as `OrderRejectedError: insufficient margin`. The `intraday` row would have an `order_product` of `mis`, a `quantity` of -200, `closed` set to `TRUE` and the closing order's id.
+
+```{r}
+print(gold$liquidate_all_positions())
+```
+
+#### Returns
+
+The method returns a `data.frame` with one row per position, or `NULL` when this instrument holds no position at all. The table below lists its columns.
+
+| Column | Type | Description |
+|---|---|---|
+| `product` | character | The position's product, spelled the positions' way. |
+| `order_product` | character or `NA` | The product the closing order was sent with, or `NA` for a product UBI cannot send. |
+| `quantity` | numeric | The signed quantity that was held. |
+| `closed` | logical | Whether the closing order was accepted by UBI. |
+| `order_id` | character or `NA` | The closing order's id. |
+| `error` | character or `NA` | Why the position was not closed. |
+
+#### Errors
+
+The table below lists the conditions the method signals.
+
+| Condition | When |
+|---|---|
+| `BrokerError` | No broker's positions could be read. |
+| `ServiceUnavailableError` | UBI's positions document is missing or too old to serve. |
+| `UnifiedBrokerInterfaceError` | The positions could not be read for any other reason. A failure to close one position is reported in the data frame instead. |
+
+## PositionError
+
+`PositionError` is the package's own condition for a position that cannot be changed as asked. It is signalled before anything is sent, and its class is defined with the other instrument errors in `ASSETS_ERROR_PARENTS` in `R/assets_exceptions.R`, as a child of `InstrumentError`, not with the UBI client's conditions in `R/unified_broker_interface_exceptions.R`. The table below lists every message it carries, with `<...>` marking a value filled in.
+
+| Message | Signalled by |
+|---|---|
+| `No position is held in this instrument that UBI can send an order for` | `reduce_position()` and `liquidate_position()` with no product named |
+| `Positions are held under <products>, so name the product to act on` | all three, when several positions are held and no product was named |
+| `No <product> position is held in this instrument, which holds <products>` | `add_to_position()` |
+| `This is a position of <quantity> under <product>, so a <side> reduces it rather than adding to it; use reduce_position` | `add_to_position()` |
+| `No position is held in this instrument, so opening one needs both transaction_type and product` | `add_to_position()` |
+| `Positions can be closed only under cnc, mis or nrml, not '<product>'` | `reduce_position()`, `liquidate_position()` |
+
+Every message ends with a colon and the instrument's description from its `format()` method, such as `CommodityFutures(exchange='mcx', ...)`. The example below catches it by its class name.
+
+```{r}
+tryCatch(
+  gold$liquidate_position(),
+  PositionError = function(error) {
+    message("Nothing to close: ", conditionMessage(error))
+  }
+)
+```
+
+The [Errors](guide-errors.html#positionerror) page lists `PositionError` with the rest of the package's conditions.

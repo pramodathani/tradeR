@@ -3,6 +3,9 @@ url: https://pramodathani.github.io/tradeR/
 template:
   bootstrap: 5
   bootswatch: flatly
+  includes:
+    in_header: |
+      <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"; mermaid.initialize({ startOnLoad: true, theme: "neutral" });</script>
 
 navbar:
   structure:
@@ -266,3 +269,63 @@ reference:
     contents:
       - FrameBuilder
       - TimeConverter
+
+articles:
+  - title: Get started
+    navbar: Get started
+    contents:
+      - "articles/get-started"
+      - "articles/get-started-installation"
+      - "articles/get-started-configuration"
+      - "articles/get-started-first-steps"
+  - title: Using tradeR
+    navbar: Using tradeR
+    contents:
+      - "articles/guide"
+      - "articles/guide-instruments"
+      - "articles/guide-market-data"
+      - "articles/guide-discovery"
+      - "articles/guide-derivatives"
+      - "articles/guide-orders"
+      - "articles/guide-price-wrappers"
+      - "articles/guide-positions"
+      - "articles/guide-holdings"
+      - "articles/guide-synthetic-orders"
+      - "articles/guide-account"
+      - "articles/guide-asset-baskets"
+      - "articles/guide-client"
+      - "articles/guide-vocabulary"
+      - "articles/guide-errors"
+  - title: Asset classes
+    navbar: Asset classes
+    contents:
+      - "articles/asset-classes"
+      - "articles/asset-classes-equities"
+      - "articles/asset-classes-fixed-income"
+      - "articles/asset-classes-commodities"
+      - "articles/asset-classes-currencies"
+      - "articles/asset-classes-funds"
+      - "articles/asset-classes-mutual-funds"
+  - title: Analysis
+    navbar: Analysis
+    contents:
+      - "articles/analysis"
+      - "articles/analysis-indicators"
+      - "articles/analysis-patterns"
+      - "articles/analysis-statistics"
+      - "articles/analysis-signals-and-backtests"
+      - "articles/analysis-performance"
+  - title: Architecture
+    navbar: Architecture
+    contents:
+      - "articles/architecture"
+      - "articles/architecture-instrument-model"
+      - "articles/architecture-order-engine"
+      - "articles/architecture-design-choices"
+  - title: Project
+    navbar: Project
+    contents:
+      - "articles/project"
+      - "articles/project-structure"
+      - "articles/project-adding-an-asset-class"
+      - "articles/project-writing-docs"

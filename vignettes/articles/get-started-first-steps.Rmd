@@ -1,0 +1,198 @@
+---
+title: "First steps"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+This page walks through a first session in R: look up a share, read its candles, its quote and its last price, search for instruments, read an option chain, and rehearse an order without sending it. The code is the R translation of the Python library's own first session, which was captured from a local UBI on Saturday 2026-09-26, when the market was closed, so the prices quoted in the prose are Friday's close. R prints its results differently from Python, so this page describes what that session returned rather than reproducing its printed output.
+
+Start R in the directory that holds the `.env` file, such as the repository root, so that the file is found.
+
+```bash
+cd ~/Projects/tradeR
+R
+```
+
+## What happens underneath
+
+The sequence below shows the requests the session on this page makes, in order. The first line of code does the most work, because it creates the shared client, reads UBI's key and secret from MongoDB and logs in before it can look the share up.
+
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant You as Your code
+    participant Share as Equity object
+    participant Client as Shared UBI client
+    participant Mongo as MongoDB
+    participant UBI as UBI
+    You-&gt;&gt;Share: Equity$new("nse", "RELIANCE")
+    Share-&gt;&gt;Client: Instrument$shared_unified_broker_interface()
+    Client-&gt;&gt;Mongo: read the settings document
+    Mongo--&gt;&gt;Client: api_key and api_secret
+    Share-&gt;&gt;Client: get /api/instruments/details
+    Client-&gt;&gt;UBI: POST /api/session/connect
+    UBI--&gt;&gt;Client: access-token
+    Client-&gt;&gt;UBI: GET /api/instruments/details
+    UBI--&gt;&gt;Share: identity, lot size, tick size
+    You-&gt;&gt;Share: prices(), quote, last_price
+    Share-&gt;&gt;UBI: one GET per read, through the client
+    You-&gt;&gt;Share: place_order(..., price_reference, dry_run = TRUE)
+    Share-&gt;&gt;UBI: POST /api/orders/place with dry_run true
+    UBI--&gt;&gt;Share: the broker request it would send, with intent_id
+    Share--&gt;&gt;You: the dry-run answer
+</pre>
+
+## Look up a share
+
+An instrument is built by naming it. [`Equity`](../reference/Equity.html) takes an exchange and a symbol, looks the share up in UBI once, and keeps what it learns as plain fields.
+
+```{r}
+library(tradeR)
+
+reliance <- Equity$new(exchange = "nse", symbol = "RELIANCE")
+print(reliance)
+```
+
+Printing the object shows the same text as the Python library's `repr`, which for this share is `Equity(exchange='nse', segment='nse_equities', symbol='RELIANCE')`.
+
+The fields are read with `$`, as below.
+
+```{r}
+reliance$instrument_id
+reliance$lot_size
+reliance$tick_size
+```
+
+In the Python capture the `instrument_id` was `"3f92570a-9924-5bf5-9f9d-e006cd9f4202"`, the `lot_size` was `1` and the `tick_size` was `0.1`, which R holds as a plain number. The `instrument_id` is UBI's own id for the share, the same at every broker, and every later request sends only that. [Instruments](guide-instruments.html#the-fields-set-on-lookup) lists every field.
+
+## Read candles
+
+[`prices()`](../reference/Instrument.html#method-Instrument-prices) returns candles as a data frame. `days = 10` counts back ten days from today. In the Python capture the call returned six rows and eleven columns, and the R port returns the same columns in the same order: `exchange`, `segment`, `interval`, `datetime`, `open`, `high`, `low`, `close`, `volume`, `oi` and `price_factor`.
+
+```{r}
+daily <- reliance$prices(days = 10)
+dim(daily)
+head(daily, 5)
+```
+
+The `datetime` column is a `POSIXct` in the `Asia/Kolkata` time zone, and `oi`, the open interest, is `NA` for a share, because a share has none. In the capture the first row was the candle of 2026-09-16, which opened at 1243.0 and closed at 1240.0.
+
+The same call with `interval = "5minute", days = 1` returned `NULL` in the capture, because UBI had no five-minute candles stored for that range. `prices()` answers `NULL` rather than an empty data frame whenever there is nothing, so check for it with `is.null()` before using the result. [Market data](guide-market-data.html#prices) describes every column's type.
+
+## Read the quote and the last price
+
+`last_price` is an active binding, so it has no parentheses, but it is still a request to UBI each time it is read. `quote` returns the whole unified quote as a named list, which is long; it is described in full on [Market data](guide-market-data.html#quote), and here it is enough to know that in the capture it came from Zerodha's data in UBI's cache, with a previous close of 1219.2. The three order-book values below each read the quote once more.
+
+```{r}
+reliance$last_price
+reliance$best_offer
+reliance$best_bid
+reliance$mid_price
+```
+
+In the capture the last price was 1226.0. The best offer was a named list with `orders` 11, `price` 1226.0 and `quantity` 855, and both the best bid and the mid price were empty, which in R is `NULL`.
+
+That shows a Saturday trap worth knowing early. The book the broker last reported had sellers but no buyers, so `best_bid` is `NULL`, and `mid_price`, which needs a best bid, is `NULL` too. Any arithmetic on order-book values has to allow for that, because arithmetic on `NULL` gives an empty vector rather than an error.
+
+## Search for instruments
+
+`search` is a function on the class generator, `Equity$search()`, not a method of an object, and it finds symbols containing a term. It returns a data frame of rows describing instruments, not instrument objects, so it costs one request however many rows come back.
+
+```{r}
+shares <- Equity$search(exchange = "nse", term = "RELI", limit = 5)
+shares
+```
+
+In the capture only four shares matched, RELIABLE, RELIANCE, RELIGARE and RELINFRA, so the limit of five was not reached. Each row carried `instrument_id`, `exchange`, `segment`, `shape` and `symbol`, with the derivative fields such as `expiry_date` and `strike_price` left empty. [Finding instruments](guide-discovery.html#search) explains the ranking.
+
+## Read an option chain
+
+The option classes can list their own expiries and chains, through functions on their class generators. The session below finds NIFTY's expiries, reads the chain for the nearest one, and shows its first five rows.
+
+```{r}
+expiries <- EquityIndexOption$expiries(
+  exchange = "nse",
+  underlying_symbol = "NIFTY"
+)
+expiries
+chain <- EquityIndexOption$chain(
+  exchange = "nse",
+  underlying_symbol = "NIFTY",
+  expiry_date = expiries[1]
+)
+dim(chain)
+head(chain, 5)
+```
+
+`expiries` is a `Date` vector, soonest first. In the capture there were eighteen expiries, the first three being 2026-09-29, 2026-10-06 and 2026-10-13, and the chain for the first had 538 rows, a call and a put at each of 269 strikes. Each row holds `instrument_id`, `exchange`, `segment`, `shape`, `symbol`, `underlying_symbol`, `expiry_date`, `strike_price` and `option_type`, and the first rows were the 1500 call and put.
+
+To trade or quote one of these, pass a row's identity to the class. That sends one lookup, and returns a full object with its lot size, tick size and order book.
+
+```{r}
+row <- chain[1, ]
+option <- EquityIndexOption$new(
+  exchange = row$exchange,
+  underlying_symbol = row$underlying_symbol,
+  expiry_date = row$expiry_date,
+  strike_price = row$strike_price,
+  option_type = row$option_type
+)
+```
+
+## Rehearse an order with a dry run
+
+::: {.alert .alert-danger}
+**These are real orders.**
+
+`place_order()` sends real orders to real brokers with real money unless `dry_run = TRUE` is passed. Every call in this section passes it. With a dry run, UBI chooses a broker and builds that broker's request, then hands it back without sending it.
+:::
+
+The first rehearsal is a plain limit order: buy one share for delivery at 1000 rupees. The answer is a named list that shows the broker UBI chose and the exact form it would have posted. Both rehearsals in the Python capture were made on 2026-09-26, the day before UBI began holding plain limit orders in its engine; a plain limit order sent for real today is held until the book reaches its price, as [Order engine](architecture-order-engine.html#plain-limit-orders-are-held) explains, and its dry run may answer differently from the one described here.
+
+```{r}
+answer <- reliance$place_order(
+  transaction_type = "buy",
+  order_type = "limit",
+  quantity = 1,
+  product = "cnc",
+  price = 1000,
+  dry_run = TRUE
+)
+str(answer)
+```
+
+The answer holds the fields `broker`, `dry_run`, `instrument_id`, `intent_id`, `request`, `skipped`, `tag` and `timing_ms`. In the capture UBI chose Shoonya, and `request` held the method `POST`, Shoonya's `PlaceOrder` address and the form it would have posted, with `prc` set to `1000`, `prctyp` to `LMT` and `tsym` to `RELIANCE-EQ`. The `intent_id` is added by UBI's order engine to every answer.
+
+The second rehearsal was captured in a separate run the same morning. It replaces the price with a description of it: buy at the best offer, level 1, and let UBI's engine read the price from the live book and round it to the tick. This is what the price wrappers such as [`buy_at_best_offer_price()`](../reference/TradeableInstrument.html#method-TradeableInstrument-buy_at_best_offer_price) send.
+
+```{r}
+answer <- reliance$place_order(
+  transaction_type = "buy",
+  order_type = "limit",
+  quantity = 1,
+  product = "cnc",
+  price_reference = list(
+    kind = "offer_level",
+    level = 1
+  ),
+  dry_run = TRUE
+)
+str(answer)
+```
+
+In the capture the engine resolved the reference to a price of `1226.0`, which is the best offer the quote showed earlier on this page. The two answers also chose different brokers, Shoonya and Stoxkart; UBI chooses the broker for each order itself. A limit order priced only by a reference is never held, so this one would be sent at once.
+
+[Order engine](architecture-order-engine.html) explains what UBI's engine does with an order, and [Orders](guide-orders.html#place_order) documents [`place_order()`](../reference/TradeableInstrument.html#method-TradeableInstrument-place_order) in full.
+
+## Where to go next
+
+The list below points at the pages that pick up from here.
+
+- **[Market data](guide-market-data.html)** covers every price member, including the eleven order-book values and what each returns on an empty book.
+- **[Finding instruments](guide-discovery.html)** covers search, expiries, contracts, strikes and chains, and why they return rows rather than objects.
+- **[Derivatives](guide-derivatives.html)** covers days to expiry, the underlying's price, a future's basis, and an option's moneyness, implied volatility and greeks.
+- **[Orders](guide-orders.html)** covers placing, modifying and cancelling orders, and reading them back.
+- **[Asset baskets](guide-asset-baskets.html)** covers portfolios, watchlists, indices and fund contents, priced in one request and analysed like one instrument.
+- **[Errors](guide-errors.html)** covers every condition the package signals, and what to do about each.
