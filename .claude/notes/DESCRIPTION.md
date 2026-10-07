@@ -18,3 +18,7 @@ The user chose the MIT licence on 2026-10-07, when the repository was made publi
 | `talib` | The R binding of the TA-Lib C library, published on CRAN on 2026-10-05, which bundles the C library and needs only CMake; it covers 121 of the 150 TA-Lib functions the Python library calls, and the other 29 are simple arithmetic written in base R |
 
 The tidyverse is deliberately left out, because the user's rules ask for simple R that a one-year R user can follow and base R covers everything needed.
+
+## Links
+
+`URL` names the pkgdown site first and the GitHub repository second, because pkgdown reads the first `URL` entry as the site's address when it links pages together, and `BugReports` points at the repository's issues. Both were added on 2026-10-07, when the repository was made public and the site was set up.

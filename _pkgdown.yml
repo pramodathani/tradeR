@@ -1,0 +1,268 @@
+url: https://pramodathani.github.io/tradeR/
+
+template:
+  bootstrap: 5
+  bootswatch: flatly
+
+navbar:
+  structure:
+    left:
+      - intro
+      - reference
+      - articles
+    right:
+      - search
+      - github
+
+reference:
+  - title: Connecting to UBI
+    desc: "The client every object sends its requests through, and the settings it reads."
+    contents:
+      - UnifiedBrokerInterface
+      - Configuration
+  - title: Instruments
+    desc: "What every instrument can do: identity, candles, quotes, the order book, orders and positions."
+    contents:
+      - Derivative
+      - Futures
+      - IndexFutures
+      - IndexOption
+      - Instrument
+      - InstrumentCatalogue
+      - NonTradeableInstrument
+      - Option
+      - TradeableInstrument
+  - title: Equities
+    desc: "Shares, equity indices and their futures and options."
+    contents:
+      - Equity
+      - EquityFutures
+      - EquityIndex
+      - EquityIndexFutures
+      - EquityIndexOption
+      - EquityOption
+  - title: Fixed income
+    desc: "Bonds, government securities and their derivatives."
+    contents:
+      - FixedIncome
+      - FixedIncomeFutures
+      - FixedIncomeIndex
+      - FixedIncomeIndexFutures
+      - FixedIncomeIndexOption
+      - FixedIncomeOption
+  - title: Commodities
+    desc: "Commodities, commodity indices and their derivatives."
+    contents:
+      - Commodity
+      - CommodityFutures
+      - CommodityIndex
+      - CommodityIndexFutures
+      - CommodityIndexOption
+      - CommodityOption
+  - title: Currencies
+    desc: "Currency pairs, currency indices and their derivatives."
+    contents:
+      - Currency
+      - CurrencyFutures
+      - CurrencyIndex
+      - CurrencyIndexFutures
+      - CurrencyIndexOption
+      - CurrencyOption
+  - title: Funds and mutual funds
+    desc: "Exchange traded funds, investment trusts and mutual funds."
+    contents:
+      - ExchangeTradedFund
+      - InvestmentTrust
+      - MutualFund
+  - title: Option pricing
+    desc: "Black-Scholes and Black-76 prices, greeks and implied volatility."
+    contents:
+      - Black76
+      - BlackScholes
+      - OptionPricingModel
+  - title: Analysis
+    desc: "The analysis classes every instrument and basket inherits, in inheritance order."
+    contents:
+      - CandlestickPatterns
+      - CycleIndicators
+      - MathOperators
+      - MathTransforms
+      - MomentumIndicators
+      - OverlapStudies
+      - PerformanceMeasures
+      - PERFORMANCE_MEASURES_DAY_INTERVAL
+      - PERFORMANCE_MEASURES_HISTORICAL_METHOD
+      - PERFORMANCE_MEASURES_MINUTE_INTERVAL_PATTERN
+      - PERFORMANCE_MEASURES_PARAMETRIC_METHOD
+      - PERFORMANCE_MEASURES_TRADING_DAYS_PER_YEAR
+      - PERFORMANCE_MEASURES_TRADING_MINUTES_PER_DAY
+      - PriceAnalysis
+      - PriceStatistics
+      - PriceTransforms
+      - Signals
+      - StatisticFunctions
+      - StrategyBacktests
+      - VolatilityIndicators
+      - VolumeIndicators
+  - title: Backtesting engine
+    desc: "The R counterpart of the Python backtesting package that StrategyBacktests runs on."
+    contents:
+      - Backtest
+      - BacktestBroker
+      - BacktestOrder
+      - BacktestPlot
+      - BacktestPosition
+      - BacktestStatistics
+      - BACKTESTING_FULL_EQUITY
+      - BacktestStrategy
+      - BacktestTrade
+  - title: Synthetic orders
+    desc: "Order types that UBI's order engine works on your behalf."
+    contents:
+      - AccountConditionalOrder
+      - AccumulationOrder
+      - AttachedHedgeOrder
+      - AverageTrueRangeTrailOrder
+      - BasketOrder
+      - BracketOrder
+      - CandleCloseStopOrder
+      - ChaserOrder
+      - CloseOnTriggerOrder
+      - ClosingPriceOrder
+      - CoverOrder
+      - CrossInstrumentOrder
+      - DailyStopOrder
+      - DiscretionaryOrder
+      - ExposureHedgeOrder
+      - ExposureWatch
+      - FreezeSlicerOrder
+      - GoodTillTimeOrder
+      - GoodTillTriggeredOrder
+      - GridOrder
+      - HiddenStopOrder
+      - IcebergOrder
+      - ImplementationShortfallOrder
+      - IndicatorTriggeredOrder
+      - LadderOrder
+      - LeggedSpreadOrder
+      - LimitIfTouchedOrder
+      - LiquiditySeekingOrder
+      - MarketableLimitOrder
+      - MarketIfTouchedOrder
+      - OneCancelsAllOrder
+      - OneCancelsOtherOrder
+      - OneTriggersOtherOrder
+      - OpeningAuctionOrder
+      - OrderCandidate
+      - ParticipationOrder
+      - PegOrder
+      - PostOnlyOrder
+      - ScaleOutOrder
+      - ScaleWithProfitTakerOrder
+      - ScheduledOrder
+      - SimpleOrder
+      - SquareOffOrder
+      - SteppedStopOrder
+      - StopAndReverseOrder
+      - StrategyStopOrder
+      - SyntheticOrder
+      - TimeStopOrder
+      - TimeWeightedAveragePriceOrder
+      - TrailingEntryOrder
+      - TrailingStopOrder
+      - TwoSidedBreakoutOrder
+      - TwoSidedQuoteOrder
+      - UnderlyingPegOrder
+      - VirtualLimitOrder
+      - VolatilityOrder
+      - VolumeWeightedAveragePriceOrder
+  - title: Plan orders
+    desc: "An order described as a plan of parts."
+    contents:
+      - PlanOrder
+  - title: Plan parts
+    desc: "The parts a plan is built from: structure, pricing, quantity, execution, triggers, guards and lifetimes."
+    contents:
+      - AccountCondition
+      - AllAtOnceExecution
+      - AllConditions
+      - AnyCondition
+      - BookDepthExecution
+      - CandleCloses
+      - CapModifier
+      - ChasePricing
+      - DailyExecution
+      - DiscretionModifier
+      - EitherPart
+      - FixedPricing
+      - FollowInstrumentPricing
+      - FreezeLimitExecution
+      - FromFillPricing
+      - FromParentFillPricing
+      - FrontLoadedExecution
+      - IcebergExecution
+      - LadderExecution
+      - Lifetime
+      - LimitMarketable
+      - MarketablePricing
+      - NativeStopPricing
+      - OptionModelPricing
+      - OrderPart
+      - PaperVenue
+      - ParentFillDeltaQuantity
+      - ParentFillQuantity
+      - ParticipationExecution
+      - PegPricing
+      - PlanPart
+      - PositionQuantity
+      - PostOnlyGuard
+      - PreOpenVenue
+      - Preset
+      - PriceCrosses
+      - RepeatPart
+      - SequencePart
+      - StageRule
+      - StagesPricing
+      - ThenPart
+      - TimeAfter
+      - TimeAt
+      - TimeBefore
+      - TimeFrom
+      - TogetherPart
+      - TopUpExecution
+      - TrailPricing
+      - Trails
+      - TwapExecution
+      - UsingPart
+      - VwapExecution
+  - title: Asset baskets
+    desc: "Portfolios, watchlists, indices and fund constituents, stored in MongoDB."
+    contents:
+      - AssetBasket
+      - BasketCsvImporter
+      - BasketMember
+      - BasketStore
+      - ExchangeTradedFundConstituents
+      - Index
+      - MemberResolver
+      - MutualFundConstituents
+      - Portfolio
+      - Watchlist
+  - title: The account
+    desc: "Account-wide reads and the flatten operation."
+    contents:
+      - Account
+  - title: Errors
+    desc: "The condition classes, which keep the Python exception names and hierarchy."
+    contents:
+      - ASSET_BASKETS_ERROR_PARENTS
+      - ASSETS_ERROR_PARENTS
+      - UNIFIED_BROKER_INTERFACE_ERROR_FOR_STATUS_CODE
+      - UNIFIED_BROKER_INTERFACE_ERROR_PARENTS
+      - ErrorCatalogue
+      - UTILITIES_LANGUAGE_ERROR_PARENTS
+  - title: Utilities
+    desc: "Turning UBI's answers into data frames and dates."
+    contents:
+      - FrameBuilder
+      - TimeConverter

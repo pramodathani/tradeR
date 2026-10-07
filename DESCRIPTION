@@ -29,3 +29,5 @@ Suggests:
     withr
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.1.0
+URL: https://pramodathani.github.io/tradeR/, https://github.com/pramodathani/tradeR
+BugReports: https://github.com/pramodathani/tradeR/issues
