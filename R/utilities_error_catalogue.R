@@ -7,11 +7,13 @@
 #' \describe{
 #'   \item{`ValueError`}{An argument has the right type but a value the method cannot use, such as a price that is not above zero.}
 #'   \item{`TypeError`}{An argument has the wrong type, such as an underlying that is not an `Instrument`.}
+#'   \item{`NotImplementedError`}{A base class method that only a subclass can supply was called on the base class, such as `PlanPart$document()`.}
 #' }
 #' @keywords internal
 UTILITIES_LANGUAGE_ERROR_PARENTS <- c(
   ValueError = "error",
-  TypeError = "error"
+  TypeError = "error",
+  NotImplementedError = "error"
 )
 
 #' The catalogue of every error class the package signals
