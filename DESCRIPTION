@@ -15,7 +15,6 @@ Description: An Indian market instrument is an R object. Name a share, a futures
 License: file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE, r6 = TRUE)
-RoxygenNote: 7.3.3
 Depends:
     R (>= 4.3)
 Imports:
@@ -29,3 +28,4 @@ Suggests:
     testthat (>= 3.0.0),
     withr
 Config/testthat/edition: 3
+Config/roxygen2/version: 8.1.0
