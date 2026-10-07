@@ -306,12 +306,11 @@ UnifiedBrokerInterface <- R6::R6Class(
       query <- private$query_text(params)
       request <- httr2::request(paste0(url, query))
       request <- httr2::req_method(request, method)
-      for (header_name in names(headers)) {
-        request <- httr2::req_headers(
-          request,
-          .headers = headers[header_name]
-        )
-      }
+      header_arguments <- c(
+        list(request),
+        headers
+      )
+      request <- do.call(httr2::req_headers, header_arguments)
       if (!is.null(body)) {
         request <- httr2::req_body_raw(
           request,

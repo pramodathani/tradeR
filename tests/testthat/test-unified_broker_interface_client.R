@@ -44,7 +44,7 @@ test_that("the first request connects, then sends the token and query", {
       )
     )
   )
-  httr2::local_mocked_responses(function(request) server$respond(request))
+  httr2::local_mocked_responses(function(req) server$respond(req))
   client <- test_client()
 
   answer <- client$get(
@@ -94,7 +94,7 @@ test_that("a 401 reconnects once and retries", {
       )
     )
   )
-  httr2::local_mocked_responses(function(request) server$respond(request))
+  httr2::local_mocked_responses(function(req) server$respond(req))
 
   answer <- test_client()$status()
 
@@ -124,7 +124,7 @@ test_that("a failing status becomes its own error class with the skipped brokers
       )
     )
   )
-  httr2::local_mocked_responses(function(request) server$respond(request))
+  httr2::local_mocked_responses(function(req) server$respond(req))
 
   caught <- tryCatch(
     test_client()$post(
@@ -158,7 +158,7 @@ test_that("an unmapped status is a ServerError", {
       body = list()
     )
   )
-  httr2::local_mocked_responses(function(request) server$respond(request))
+  httr2::local_mocked_responses(function(req) server$respond(req))
 
   caught <- tryCatch(
     test_client()$get("/api/anything"),

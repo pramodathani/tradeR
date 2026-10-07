@@ -8,6 +8,8 @@ Port of `src/tradingmachine/unified_broker_interface/client.py`. The behaviour i
 
 ## How requests are built
 
+- The headers are added with one `do.call(httr2::req_headers, ...)`, because `req_headers()` takes each header as its own named argument and has no argument that accepts a list. An earlier version passed `.headers =`, which httr2 treated as a header literally named `.headers`; the mocked-response tests caught it on 2026-10-07.
+
 - `httr2::req_error(is_error = function(response) FALSE)` stops httr2 from turning failing statuses into its own errors, so `raise_for_failure` can map them to UBI's classes exactly as the Python code does with `response.ok`.
 - A connection failure arrives as an `httr2_failure` condition and becomes `UnreachableError`, the counterpart of catching `requests.RequestException`.
 - Query parameters are written by `query_text` rather than `httr2::req_url_query()`, because the latter needs rlang's `!!!` splicing for a list of parameters, which the user's simplicity rule discourages. `NULL` values are dropped, as `requests` drops `None`, and a vector value repeats the key, as `requests` does for a list.
