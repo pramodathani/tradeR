@@ -1,0 +1,16 @@
+test_that("the position sums the open trades", {
+  candles <- ParityTinyCandles$new()$frame()
+  broker <- BacktestBroker$new(candles, 10000, 0, 1, FALSE, TRUE, FALSE)
+  broker$current_bar <- 1
+  broker$new_order(5)
+  broker$new_order(-2)
+  broker$next_bar(2)
+  expect_equal(broker$position$size, 3)
+  expect_true(broker$position$is_long)
+  expect_equal(broker$position$pl, 5 * 2 - 2 * 2)
+  expect_equal(broker$position$pl_pct, 6 / (7 * 102) * 100)
+  broker$position$close()
+  broker$next_bar(3)
+  expect_equal(broker$position$size, 0)
+  expect_equal(broker$position$pl_pct, 0)
+})
