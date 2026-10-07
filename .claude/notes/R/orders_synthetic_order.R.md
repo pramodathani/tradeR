@@ -1,0 +1,58 @@
+# R/orders_synthetic_order.R
+
+Port of `src/tradingmachine/orders/synthetic_order.py`. The sections up to "How the R version differs" are carried over from the Python note and still apply, with Python names read as their R counterparts: `None` as `NULL`, `True` as `TRUE`, a dict as a named list, `ValueError` as the condition of that class.
+
+`SyntheticOrder` is the shallow base the user's rules allow: it holds only what every synthetic type does identically. It stores the order template, builds the `synthetic` object from `SYNTHETIC_TYPE` and the subclass's `synthetic_fields()`, and sends the whole thing through `TradeableInstrument.place_order`. It validates nothing, because UBI validates the template exactly as it validates a plain order and each engine class checks its own fields, answering HTTP 400 with a message naming the field.
+
+## Why `place()` goes through `place_order`
+
+Every order in the library is built in one place. Sending through `place_order` means the body is assembled by the same code as a plain order, so a synthetic order and a plain one cannot drift apart. The alternative, posting to `/api/orders/place` from here, would have been a second body builder. Until 2026-09-27 `place_order` also refused to send a synthetic order when UBI placed orders directly, without its engine; UBI removed that mode that day, so the check went too.
+
+## The template
+
+Every type sends an ordinary order body alongside its `synthetic` object, and UBI runs `PlaceOrderRequest` over it before the engine sees it, so even a type that never places the template as it stands needs a resolvable instrument, a side, a product, an order type and a quantity. Most types use the template for every order they send and change only what they must. The template's fields are public attributes on the object, so a caller can inspect or change an order before placing it.
+
+`quantity` has no default and accepts None, like `place_order`'s, because a quantity reference can supply it. `price_reference` and `quantity_reference` are accepted by every class and passed through as plain dicts, because 28 of UBI's types resolve them.
+
+## Keyword-only arguments
+
+Every argument after the instrument is keyword-only. The classes take between fifteen and twenty-two arguments, and several are numbers in rupees that are easy to put in the wrong position, such as a stop's trigger and its limit, where a swap produces a stop that fires at the wrong level. Keyword-only arguments also let each subclass put its own required settings next to the template's required fields without Python's rule about defaults getting in the way.
+
+## `synthetic`, `synthetic_fields` and `closes_position`
+
+`synthetic_fields()` returns the type's settings as UBI names them, including those that are None, and the `synthetic` property drops the Nones so UBI applies its own defaults. The subclass therefore never repeats the "leave it out when it is None" loop. `closes_position` is sent only as a literal `True`, because UBI's engine counts only the literal `true` and ignores anything else, and a False would say nothing UBI does not already assume.
+
+`SYNTHETIC_TYPE` on the base is `simple`, the type UBI runs when no `synthetic` object is sent, so the base alone would place a plain order. It is not meant to be used directly; `SimpleOrder` is the named class for that.
+
+## What the answer looks like
+
+A type that acts at once answers with the broker's answer and a `parent_id`; `freeze_slicer` and `ladder` add a list of `order_ids`. Since 2026-09-27 the types that send several orders at once share one rule for the combined `outcome`: `accepted` when all were accepted, `partial` with HTTP 207 when some were, and `unknown` or `rejected` otherwise. HTTP 207 is a success status, so a partial answer is returned, and the caller must read each order's own outcome in it. A type that waits for a price or a time answers HTTP 202, which the client also treats as success, with an `outcome` of `armed` or `scheduled` and a `broker` and `order_id` of None.
+
+## `parent_id`, `cancel()`, `parent`, `orders` and `trades`
+
+The `parent_id` is the only handle on an order that has not reached a broker. When the package was written UBI had no route to read or cancel a parent, so the id was only returned. On 2026-09-27 UBI added `GET /api/orders/parents`, `DELETE /api/orders/parents` and a `parent_id` filter on the order and trade books, so `place()` now keeps the id on the object and the object can act on itself: `cancel()` cancels the parent and its resting legs, `parent` reads the engine's own record, and `orders` and `trades` read the broker orders and fills it has produced. They go through `TradeableInstrument` methods of the same names, so the routes are called from one place, and each refuses with `ValueError` before `place()` has run, or after a dry run, which records nothing and so gives no id.
+
+`reduce_only` is sent only as a literal `True`, for the same reason as `closes_position`: UBI refuses anything but true or false, and a False says nothing UBI does not assume.
+
+## `hold_limits` (2026-10-05)
+
+UBI began holding limit orders in its virtual order book by default on 2026-10-03, the day it retired its fixed order classes and started running every type but `simple` and `plan` as a plan of the type's preset. Whether an order is held is decided by `hold_limits` in the `synthetic` object, and its default differs by type: eighteen types hold while UBI's `UNIFIED_BROKER_INTERFACE_API_ORDER_HOLD_LIMITS` switch is on, a hand-written plan follows the switch, and every other type does not hold.
+
+Unlike `closes_position` and `reduce_only`, a False here is not what UBI assumes, because a ladder or a bracket now holds unless told otherwise. So the argument is a three-way `bool | None`: None leaves the field out and lets UBI apply the type's default, and True and False are both sent. It was added to the base class and to every one of the fifty-four subclasses, the way `reduce_only` was, rather than only to the eighteen holding types, because UBI reads the field on any type and the library validates nothing locally; a type that cannot be held refuses True with HTTP 400 and the rule `not_holdable`, and `simple` refuses True outright.
+
+The same field exists on one order of a plan, which `OrderPart.hold_limits` sends. It matters most for follow-on orders such as a bracket's target, which the request's `hold_limits` never reaches.
+
+## How the R version differs
+
+- `SyntheticOrder` is an R6 class. The fifty-four type classes inherit it, one class per file, each adding only its own settings and `synthetic_fields()`. The plan order lives in `R/orders_plan.R`, which another helper ports.
+- `SYNTHETIC_TYPE` is a public field rather than a class attribute, because R6 has no class attributes. Its value comes from the package constant `ORDERS_SYNTHETIC_ORDER_SYNTHETIC_TYPE`, and each subclass overrides the field with its own `ORDERS_<MODULE>_SYNTHETIC_TYPE`. Reading it on an object, `order$SYNTHETIC_TYPE`, works as `order.SYNTHETIC_TYPE` does in Python.
+- Python's keyword-only arguments became ordinary named arguments, in the same order and with the same defaults. `quantity` still has no default, so leaving it out fails as soon as it is used, which is during construction.
+- `synthetic`, `parent`, `orders` and `trades` are active bindings, the package's counterpart of Python properties, and each signals an error when assigned to. Their Python examples could not go on the bindings, because roxygen has no `@examples` for R6 fields, so they are translated into the class's `@examples` instead.
+- `synthetic` drops the `NULL` entries of `synthetic_fields()` with an explicit loop. `closes_position` and `reduce_only` are added only when `isTRUE()`, which matches Python's truthiness test for the logical values callers pass. `hold_limits` is added whenever it is not `NULL`, so `FALSE` is sent, as in Python.
+- `place()` keeps the `parent_id` only when the answer is a list holding a non-`NULL` `parent_id`, which is Python's `isinstance(answer, dict)` test.
+- The refusal before placing is `ErrorCatalogue$raise("ValueError", ...)`, so `tryCatch(..., ValueError = ...)` catches it, with the same message as Python.
+- A JSON array in the request body must be an unnamed R `list()`, because the client encodes with `auto_unbox = TRUE` and would send a one-element vector as a bare value. The subclasses that send lists (candidates, watched instruments, target prices, volume profiles, instrument ids) therefore keep them as lists; each subclass's note says how.
+
+## How it was checked
+
+On 2026-10-07 every type, including this base, was built in Python and in R against fake clients, from the required arguments only, from every argument, and with one-element lists where the type takes a list, 119 cases in all. The JSON body each side sent to `/api/orders/place` was parsed and compared key by key, and all 119 matched. The scripts and `results.txt` are in the session scratchpad under `parity/orders/`. The tests in `tests/testthat/test-orders_synthetic_order.R` cover the `synthetic` object, `place()`, the kept `parent_id`, the `ValueError` before placing, and `cancel()`, `parent` and `orders` against the fake client.

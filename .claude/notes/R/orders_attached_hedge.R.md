@@ -1,0 +1,31 @@
+# R/orders_attached_hedge.R
+
+Port of `src/tradingmachine/orders/attached_hedge.py`. What follows the first heading below is carried over from the Python note and still applies.
+
+## From the Python note
+
+`AttachedHedgeOrder` mirrors UBI's `attached_hedge` synthetic order type, `unified_broker_interface/utilities/order_engine/attached_hedge.py` in the sibling project. Its settings, their defaults and their limits were taken from `../unified_broker_interface/docs/rest-api/synthetic-orders.md` on 2026-09-27, and its parameter names are UBI's field names, except that `hedge_instrument_id` is taken as the instrument object `hedge_instrument`, as `CrossInstrumentOrder` does with its watched instrument.
+
+In the Synthetic Order Atlas that UBI's engine was designed from, it is row G14 attached hedge. UBI built the Atlas's group G on 2026-09-27, and this class was added the same day to catch up with it.
+
+It checks none of its settings before sending, following the rule that UBI holds the order rules; UBI's engine checks each field when it builds the order and answers HTTP 400 naming the one that is wrong, and a dry run shows that without sending anything.
+
+`ratio` and `delta_volatility` are both optional here and UBI requires exactly one.
+
+## UBI's fixes of 2026-10-05, recorded on 2026-10-06
+
+UBI's commit `15380c1` fixed several ways an attached hedge fell out of step with its entry. The hedge stopped growing once all its broker orders had filled, so later entry fills went unhedged while the parent ended `completed`; it now grows again. An `ioc` hedge the exchange cancelled was sent again at once in a loop; it now waits for the next entry fill. A caller's change to a hedge order's quantity used to be modified straight back and is now kept. An entry that finished with less than one lot of hedge to send used to leave the parent `working` for ever; it now completes. A stale hedge quote or a delta with no forward price now waits and is retried on every tick. A refused hedge now cancels the rest of the entry and ends the parent `failed` instead of `completed` with the position unhedged, and naming the entry's own instrument as the hedge is refused with HTTP 400, because the engine had bought 1,000 RELIANCE and sold the same 1,000 straight back.
+
+## How the R version differs
+
+- `AttachedHedgeOrder` is an R6 class inheriting `SyntheticOrder`, which does the sending, keeps the `parent_id`, and offers `cancel()`, `parent`, `orders` and `trades`. This file adds only the type's own settings and its `synthetic_fields()`, in line with the user's rule of one self-contained class per case over a shallow base.
+- Python's keyword-only arguments became ordinary named arguments in the same order and with the same defaults. R would accept them by position too, but every example names them, for the same reason Python made them keyword-only: several are prices in rupees that are easy to swap.
+- `SYNTHETIC_TYPE` is a public field whose value comes from the package constant `ORDERS_ATTACHED_HEDGE_SYNTHETIC_TYPE`, so `order$SYNTHETIC_TYPE` reads the same as Python's class attribute.
+- `synthetic_fields()` returns a named list that keeps `NULL` entries, and the base class's `synthetic` binding drops them, so a setting left as `NULL` is left out of the request body exactly where Python leaves out `None`.
+- The hedge instrument is sent as `hedge_instrument_id`, read from the instrument object, as in Python.
+
+## How it was written and checked
+
+The file was generated on 2026-10-07 from the Python module by a scratch script that read the constructor's signature, the body of `synthetic_fields()` and the docstrings with `ast`, then reviewed and corrected by hand. The examples are the Python docstring examples translated line for line.
+
+Parity was checked the same day against fake clients on both sides: the type was built in Python and in R from the required arguments only, from every argument set, and, when it takes a list, with one-element lists, and the JSON body each sent to `/api/orders/place` was parsed and compared key by key. All of them matched.
