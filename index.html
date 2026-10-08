@@ -294,11 +294,21 @@
 </blockquote>
 </div>
 <div class="section level2">
+<h2 id="example-programs">Example programs<a class="anchor" aria-label="anchor" href="#example-programs"></a>
+</h2>
+<p>The <code>examples/</code> folder holds 468 standalone R programs, at least two for every public class, translated from the Python library’s own examples and kept in the same folder tree, such as <code>examples/assets/equities/equity/equity/</code>. Each program is one R6 class whose <code>run()</code> method does the work, and it runs from the repository root with <code>Rscript</code>:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="ex">Rscript</span> examples/accounts/account/account/flatten_preview.R</span></code></pre></div>
+<blockquote>
+<p>[!CAUTION] About eighty of these programs place real orders with real money, buying or selling a share and then cancelling or closing it, exactly as their Python originals do. Read a program before running it. None of them has been run in R yet.</p>
+</blockquote>
+<p>The folder is in the repository but not in the built package, because many of its paths are longer than the 100 characters an R package tarball stores reliably.</p>
+</div>
+<div class="section level2">
 <h2 id="tests">Tests<a class="anchor" aria-label="anchor" href="#tests"></a>
 </h2>
 <p>The tests drive every class through a fake client and mocked HTTP responses, so they never reach UBI and never place an order.</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="ex">Rscript</span> <span class="at">-e</span> <span class="st">'devtools::test()'</span></span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="ex">Rscript</span> <span class="at">-e</span> <span class="st">'lintr::lint_package()'</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="ex">Rscript</span> <span class="at">-e</span> <span class="st">'devtools::test()'</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="ex">Rscript</span> <span class="at">-e</span> <span class="st">'lintr::lint_package()'</span></span></code></pre></div>
 <p>This package keeps no explanatory comments in source files. Reasoning, trade-offs and the record of where the R version differs from Python go into a sidecar note under <code>.claude/notes/</code>, mirroring the source tree, so <code>R/assets_equities.R</code> is documented by <code>.claude/notes/R/assets_equities.R.md</code>.</p>
 </div>
 </div>
