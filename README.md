@@ -99,6 +99,19 @@ sudo apt install -y libcurl4-openssl-dev libssl-dev libsasl2-dev libuv1-dev libg
 > [!NOTE]
 > UBI holds one access token for the whole application, and every client shares it. A connect hands back the token in force when it was issued at or after the most recent 07:00 and has not expired, so an R session and a running Python script that uses `tradingmachine` work side by side. Only the first connect after 07:00 on an older token mints a new one, and `disconnect()` revokes the token for everyone; other clients then get HTTP 401, and this package and `tradingmachine` both reconnect and retry once. If a long-running script keeps seeing 401s, something else disconnected. UBI's [How the token lives and dies](https://pramodathani.github.io/unified_broker_interface/rest-api/session/#how-the-token-lives-and-dies) has the full rules.
 
+## Example programs
+
+The `examples/` folder holds 468 standalone R programs, at least two for every public class, translated from the Python library's own examples and kept in the same folder tree, such as `examples/assets/equities/equity/equity/`. Each program is one R6 class whose `run()` method does the work, and it runs from the repository root with `Rscript`:
+
+```bash
+Rscript examples/accounts/account/account/flatten_preview.R
+```
+
+> [!CAUTION]
+> About eighty of these programs place real orders with real money, buying or selling a share and then cancelling or closing it, exactly as their Python originals do. Read a program before running it. None of them has been run in R yet.
+
+The folder is in the repository but not in the built package, because many of its paths are longer than the 100 characters an R package tarball stores reliably.
+
 ## Tests
 
 The tests drive every class through a fake client and mocked HTTP responses, so they never reach UBI and never place an order.

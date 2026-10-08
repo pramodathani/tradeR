@@ -11,3 +11,4 @@
 ^\.github$
 ^pkgdown$
 ^vignettes/articles$
+^examples$
