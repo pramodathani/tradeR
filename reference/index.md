@@ -153,6 +153,8 @@ Black-Scholes and Black-76 prices, greeks and implied volatility.
 - [`OptionPricingModel`](https://pramodathani.github.io/tradeR/reference/OptionPricingModel.md)
   : The mechanism every pricing model here shares: the normal
   distribution and the search for an implied volatility
+- [`OPTION_PRICING_DEFAULT_RISK_FREE_RATE`](https://pramodathani.github.io/tradeR/reference/OPTION_PRICING_DEFAULT_RISK_FREE_RATE.md)
+  : Default risk-free rate for option pricing
 
 ## Analysis
 
