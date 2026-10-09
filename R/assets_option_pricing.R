@@ -1,3 +1,10 @@
+#' Default risk-free rate for option pricing
+#'
+#' @description
+#' The annual risk-free interest rate, as a decimal fraction, that the option pricing models use when the caller gives none: 6.5 percent, close to the yield on Indian government bills.
+#'
+#' @format A numeric value, `0.065`.
+#' @export
 OPTION_PRICING_DEFAULT_RISK_FREE_RATE <- 0.065
 OPTION_PRICING_LOWEST_VOLATILITY <- 0.0001
 OPTION_PRICING_HIGHEST_VOLATILITY <- 5.0

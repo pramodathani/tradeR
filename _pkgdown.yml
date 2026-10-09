@@ -83,6 +83,7 @@ reference:
       - Black76
       - BlackScholes
       - OptionPricingModel
+      - OPTION_PRICING_DEFAULT_RISK_FREE_RATE
   - title: Analysis
     desc: "The analysis classes every instrument and basket inherits, in inheritance order."
     contents:
